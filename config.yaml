@@ -1,0 +1,170 @@
+# =============================================================================
+# HiGI IDS — Unified Configuration (config.yaml)
+# =============================================================================
+# Every threshold, weight, sigma, and file path lives here.
+# The source code contains zero magic numbers.
+#
+# Format: YAML 1.2 (loaded by PyYAML / strictyaml-compatible)
+# Validated at startup by src/config.py → HiGISettings dataclass.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# I/O Paths
+# ---------------------------------------------------------------------------
+paths:
+  models_dir: "models"                          # Trained artifact bundles (.pkl)
+  results_dir: "data/processed"                 # Detection result CSVs
+  reports_dir: "reports"                        # Forensic PDF + Markdown
+  logs_dir: "logs"                              # Rotating log files
+  scalers_dir: "models/scalers"                 # RobustScaler snapshots
+
+# ---------------------------------------------------------------------------
+# Ingestion
+# ---------------------------------------------------------------------------
+ingestion:
+  chunk_size: 5000          # Packets per parallel processing chunk
+  n_jobs: 6                 # CPU cores for parallel ingestion
+  time_interval: "1s"       # Feature aggregation window size
+
+# ---------------------------------------------------------------------------
+# Training Augmentation (Baseline Synthesis)
+# ---------------------------------------------------------------------------
+training:
+  baseline_augmentation_enabled: true     # Enable Gaussian noise augmentation during training
+  augmentation_noise_scale: 0.05          # Noise magnitude as fraction of feature std dev (5% default)
+  augmentation_synthetic_fraction: 0.10   # Fraction of augmented samples relative to baseline (10% default)
+
+# ---------------------------------------------------------------------------
+# Hilbert Space Projector
+# ---------------------------------------------------------------------------
+hilbert:
+  pca_variance_target: 0.99           # Cumulative explained variance for PCA (fallback)
+  pca_eigenvalue_max_condition: 1.0e12  # Stability floor for eigenvalue conditioning
+  blocked_pca_enabled: true           # Enable per-family Blocked PCA
+  blocked_pca_variance_per_family:    # Per-family variance retention targets
+    volume: 0.95                       # High-variance features (bytes, pps, velocity)
+    payload: 0.95                      # Raw byte counts with extreme scales
+    flags: 0.99                        # Low-variance ratios [0,1] — retain more variance
+    protocol: 0.99                     # Low-variance ratios — retain more variance
+    connection: 0.95                   # Kinematics and port features
+
+# ---------------------------------------------------------------------------
+# BallTree Detector (Tier 1)
+# ---------------------------------------------------------------------------
+balltree:
+  k_neighbors: 5              # k for mean k-NN distance computation
+  threshold_p90: 90.0         # Soft-zone lower bound (%)
+  threshold_p95: 95.0         # Borderline tier threshold (%)
+  threshold_p99: 99.0         # Medium tier threshold (%)
+  threshold_p99_9: 99.9       # Critical tier threshold (%)
+  slack: 1.2                  # Threshold multiplier for sensitivity tuning
+
+# ---------------------------------------------------------------------------
+# GMM Detector (Tier 2A)
+# ---------------------------------------------------------------------------
+gmm:
+  use_bayesian: true                      # BayesianGaussianMixture vs GaussianMixture
+  bayesian_weight_concentration_prior: 1.0e-2   # Sparse cluster penalty
+  reg_covar: 0.1                          # Ridge covariance regularisation
+  max_iter: 200                           # EM iterations
+  n_init: 10                             # Random restarts
+  n_components_fallback: 5               # Used when adaptive K selection fails
+  threshold_percentile: 99.9             # Inverted LL threshold (%)
+  score_normalization: "cdf"             # "cdf" | "robust" | "minmax"
+  adaptive_k_enabled: true              # Ensemble-vote for optimal K
+  adaptive_k_range: [1, 5]             # Search range for adaptive K
+  adaptive_k_max_components: 25         # Upper bound for multivariate K
+
+# ---------------------------------------------------------------------------
+# Isolation Forest Detector (Tier 2B)
+# ---------------------------------------------------------------------------
+iforest:
+  contamination: 0.05         # Expected anomaly fraction
+  n_estimators: 100
+
+# ---------------------------------------------------------------------------
+# Physical Sentinel (Tier 3 — univariate GMM log-likelihood)
+# ---------------------------------------------------------------------------
+sentinel:
+  enabled: true
+  per_feature_thresholds: true        # Per-feature LL threshold (P99.9 per feature)
+  global_threshold: 1.0e-6            # Fallback if per-feature disabled
+  directionality_analysis: true       # Track SPIKE/DROP direction in forensic output
+  portero_sigma_threshold: 20.0       # Extreme sigma → forced CRITICAL (Portero veto)
+
+# ---------------------------------------------------------------------------
+# Velocity Bypass Detector (Tier 4 — rolling Z-score gate)
+# ---------------------------------------------------------------------------
+velocity:
+  enabled: true
+  bypass_threshold: 5.0       # Z-score magnitude that fires emergency bypass
+  tribunal_weight: 0.30       # Weight in Tribunal consensus
+  # Severity mapping: z_score >= threshold → severity_level
+  severity_thresholds:
+    - [12.0, 3]               # Critical
+    - [8.0, 2]                # Medium
+    - [5.0, 1]                # Borderline
+
+# ---------------------------------------------------------------------------
+# Tribunal Consensus
+# ---------------------------------------------------------------------------
+tribunal:
+  weighted_mode: true
+  # Base weights BEFORE velocity carve-out.
+  # Actual weights = base_weight × (1 - velocity.tribunal_weight).
+  # Final weights are normalised to sum 1.0 in HiGIConfig.__post_init__().
+  weights:
+    balltree: 0.25
+    gmm: 0.40
+    iforest: 0.35
+  consensus_threshold: 0.5            # Minimum weighted score to confirm anomaly
+  majority_vote_threshold: 2          # Votes needed in legacy (non-weighted) mode
+
+# ---------------------------------------------------------------------------
+# Family Consensus (FIX-4 — co-firing requirement for borderline samples)
+# ---------------------------------------------------------------------------
+family_consensus:
+  enabled: true
+  min_hits: 2                 # Min features from same family required for escalation
+  z_threshold: 2.0            # Feature-level Z-score to count as "hit"
+
+# ---------------------------------------------------------------------------
+# Persistence / Hysteresis
+# ---------------------------------------------------------------------------
+persistence:
+  warmup_multiplier: 3        # warmup_rows = ma_window_size × warmup_multiplier
+  ma_window_size: 5           # Rolling mean window for MA contextualisation
+  transient_threshold: 0.4    # ratio > 1/transient_threshold → "Transient Spike"
+  hysteresis_entry_multiplier: 1.0    # Entry threshold = p95 × multiplier
+  hysteresis_exit_multiplier: 0.75    # Exit threshold = p95 × multiplier
+  alert_minimum_persistence: 3        # Base consecutive windows to confirm alert
+  persistence_filter_window: 3        # Rolling-min window for anti-FP filter
+
+# ---------------------------------------------------------------------------
+# Forensic Engine
+# ---------------------------------------------------------------------------
+forensic:
+  debounce_seconds: 30                # Incident clustering debounce
+  data_drop_threshold_seconds: 60     # Gap size that counts as a "Data Drop"
+  sigma_culprit_min: 2.0              # Min mean |sigma| to include incident in report
+  default_confidence_filter: 0.8     # Default min confidence for reportable incidents
+  default_min_anomalies: 3            # Default min anomalies per incident
+  default_min_duration_seconds: 1.0   # Default min incident duration
+  top_features_per_pc: 3              # Features per PC in forensic attribution
+  tier_confidence_weights:      # Pesos para Consensus Confidence Index
+    balltree: 0.20
+    gmm: 0.25
+    iforest: 0.20
+    physical_sentinel: 0.20
+    velocity_bypass: 0.15
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  level: "INFO"               # DEBUG | INFO | WARNING | ERROR
+  format: "[%(asctime)s] [%(levelname)-8s] [%(name)s] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  file_enabled: true
+  file_max_bytes: 10_485_760  # 10 MB per log file
+  file_backup_count: 5

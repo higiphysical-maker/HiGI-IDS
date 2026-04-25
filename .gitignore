@@ -1,0 +1,125 @@
+################################################################################
+# NADS Project — Production .gitignore
+# Ensures repository excludes artifacts, sensitive data, and build outputs
+################################################################################
+
+# === PYTHON ARTIFACTS ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# === TESTING & COVERAGE ===
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# === TYPE CHECKING ===
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# === CODE QUALITY ===
+.ruff_cache/
+.pylint_cache/
+
+# === VIRTUAL ENVIRONMENTS ===
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+ids_env/
+
+# === DATA SAFETY — ESSENTIAL ===
+# PCAP files: Large, sensitive network captures (privacy critical)
+data/raw/*.pcap
+data/raw/*.pcapng
+data/raw/*.pcap.gz
+data/raw/*.pcapng.gz
+
+# Processed data excluded from version control (reproducible from raw)
+data/processed/*.csv
+data/processed/*.parquet
+
+# === GENERATED ANALYSIS ARTIFACTS ===
+# Plotly interactive visualizations (generated, not source)
+*.html
+reports/*.csv
+reports/*.html
+
+# Machine Learning models (versioned separately, large binary files)
+*.joblib
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.pth
+models/*.joblib
+models/*.pkl
+
+# === IDE & EDITOR ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+.project
+.pydevproject
+.settings/
+*.iml
+
+# === SYSTEM FILES ===
+.DS_Store
+Thumbs.db
+*.log
+*.pot
+.env
+.env.local
+
+# === BUILD ARTIFACTS ===
+*.o
+*.a
+*.so
+*.dylib
+
+# === DOCUMENTATION BUILD ===
+docs/_build/
+site/
+
+# === TEMPORARY LOCAL FILES ===
+*.tmp
+*.bak
+~*
+.~*
+
+# === OS-SPECIFIC ===
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
