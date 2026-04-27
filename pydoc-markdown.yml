@@ -1,0 +1,16 @@
+# pydoc-markdown.yml
+renderer:
+  type: markdown
+  # Configuración para que el output sea amigable con el visor de GitHub
+  render_toc: true
+  insert_header_anchors: true
+  
+loaders:
+  - type: python
+    search_path: ["./src"] # Ajusta a tu ruta de src
+
+processors:
+  - type: filter
+    expression: not name.startswith('_') # Excluye métodos privados si quieres un reporte limpio
+  - type: google # <--- CRÍTICO: Para leer tus nuevos docstrings
+  - type: smart

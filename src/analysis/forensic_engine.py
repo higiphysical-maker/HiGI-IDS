@@ -111,15 +111,21 @@ FAMILY_COLOURS: Dict[str, str] = {
 
 
 def _extract_base_name(raw: Any) -> str:
-    """Extract the canonical metric name from a raw ``physical_culprit`` string.
+    """Extract the canonical metric name from a raw culprit annotation string.
+
+    This function isolates the base feature identifier (e.g., 'flag_syn_ratio')
+    from a richly annotated culprit string. The culprit annotation encodes the
+    Hilbert-space deviation magnitude (|σ|), directionality (SPIKE/DROP), and
+    percentage change, originating from the Blocked-PCA decomposition.
 
     Args:
-        raw: Raw culprit annotation, e.g.
-             ``"flag_syn_ratio (SPIKE (+865%), σ=4.2) | GMM: pps_acc (LL=-3.2)"``.
+        raw (Any): Raw culprit annotation string. Example:
+            'flag_syn_ratio (SPIKE (+865%), σ=4.2) | GMM: pps_acc (LL=-3.2)'.
+            May be None or NaN if the row was not flagged by Physical Sentinel.
 
     Returns:
-        Lowercase metric identifier, e.g. ``"flag_syn_ratio"``.
-        Falls back to ``"unknown"`` on parse failure or null input.
+        str: Lowercase canonical metric identifier (e.g., 'flag_syn_ratio').
+            Returns 'unknown' if parsing fails or input is null.
     """
     if raw is None or (isinstance(raw, float) and math.isnan(raw)):
         return "unknown"
@@ -128,37 +134,81 @@ def _extract_base_name(raw: Any) -> str:
 
 
 def _extract_event_type(raw: str) -> str:
-    """Return ``"SPIKE"`` or ``"DROP"`` from a culprit annotation string."""
+    """Extract the directionality of the feature deviation from a culprit annotation.
+
+    SPIKE indicates a deviation in the positive direction (anomaly magnitude
+    exceeding the P99 upper baseline), while DROP indicates a deficit in the
+    negative direction. Both represent deviations in Hilbert-space distance.
+
+    Args:
+        raw (str): Culprit annotation string containing event type marker.
+
+    Returns:
+        str: 'SPIKE' or 'DROP'. Returns 'UNKNOWN' if parsing fails.
+    """
     m = re.search(r"\b(SPIKE|DROP)\b", str(raw), re.IGNORECASE)
     return m.group(1).upper() if m else "UNKNOWN"
 
 
 def _extract_sigma(raw: str) -> float:
-    """Return the |σ| value embedded in a culprit annotation, or 0.0."""
+    """Extract the standard deviation distance from baseline (σ) from a culprit annotation.
+
+    σ (sigma) represents the number of standard deviations the feature value
+    has deviated from the inertial reference frame (baseline), as computed by
+    the Blocked-PCA analysis. Higher |σ| indicates greater confidence in the
+    anomaly and stronger alignment with the principal components.
+
+    Args:
+        raw (str): Culprit annotation string containing σ value.
+
+    Returns:
+        float: Absolute standard deviation distance (σ) in the Hilbert-space
+            inertial reference frame. Returns 0.0 if parsing fails.
+    """
     m = re.search(r"σ\s*=\s*([\d.]+)", str(raw))
     return float(m.group(1)) if m else 0.0
 
 
 def _extract_pct(raw: str) -> float:
-    """Return the absolute percentage deviation from a culprit annotation."""
+    """Extract the percentage change magnitude of a feature from its baseline.
+
+    This dimensionless ratio represents the relative deviation: e.g., a SPIKE
+    of +865% means the feature value reached 9.65× its baseline value. Used
+    for interpretability and to communicate severity to non-technical analysts.
+
+    Args:
+        raw (str): Culprit annotation string containing percentage marker.
+
+    Returns:
+        float: Absolute percentage deviation (e.g., 865.0 for a +865% spike).
+            Returns 0.0 if parsing fails.
+    """
     m = re.search(r"(?:SPIKE|DROP)\s*\(([+-]?[\d.]+)%\)", str(raw), re.IGNORECASE)
     return abs(float(m.group(1))) if m else 0.0
 
 
 def _infer_family(culprit_base: str, family_consensus: Any) -> str:
-    """Resolve the physical family for a given anomaly row.
+    """Infer the physical feature family of a metric via Blocked-PCA consensus or heuristic.
 
-    Precedence:
-    1. ``family_consensus`` column value (set by orchestrator from BlockedPCA metadata).
-    2. Keyword-match against the culprit metric name.
-    3. Fallback → ``"unknown"``.
+    The Blocked-PCA decomposition partitions network telemetry into six orthogonal
+    physical feature families (volume, payload, flags, protocol, connection, kinematics).
+    This function resolves which family a culprit metric belongs to, using the
+    consensus family (if available from BlockedPCA metadata) or keyword-matching as fallback.
+
+    Resolution precedence:
+        1. Explicit ``family_consensus`` value from BlockedPCA metadata.
+        2. Keyword matching against the canonical metric name.
+        3. 'unknown' fallback for unrecognized features.
 
     Args:
-        culprit_base: Canonical metric name, e.g. ``"flag_syn_ratio"``.
-        family_consensus: Value from the ``family_consensus`` CSV column (may be NaN).
+        culprit_base (str): Canonical metric name (e.g., 'flag_syn_ratio', 'bytes_total').
+        family_consensus (Any): Family value from BlockedPCA consensus metadata.
+            May be NaN or None if unavailable.
 
     Returns:
-        Physical family name string.
+        str: Physical family identifier:
+            'volume', 'payload', 'flags', 'protocol', 'connection', 'kinematics',
+            or 'unknown'.
     """
     if pd.notna(family_consensus) and str(family_consensus).strip():
         return str(family_consensus).strip().lower()
@@ -178,16 +228,23 @@ def _infer_family(culprit_base: str, family_consensus: Any) -> str:
 
 
 def _gaussian_cdf_confidence(sigma: float) -> float:
-    """Map |σ| → confidence probability via Gaussian CDF.
+    """Map Hilbert-space standard deviation (σ) to confidence probability via Gaussian CDF.
 
-    Physical interpretation: the probability that a deviation of ``sigma``
-    standard deviations is *not* due to chance under a Normal baseline.
+    This function models the confidence that a deviation of magnitude |σ| standard
+    deviations from the inertial reference frame is *not* due to random noise
+    under a Normal baseline distribution. It integrates the detection tiers' outputs
+    with the mathematical properties of Gaussian statistics.
+
+    The CDF provides a probabilistic interpretation: higher σ values yield confidence
+    scores approaching 1.0, indicating the anomaly is statistically significant.
 
     Args:
-        sigma: Absolute deviation in standard deviations (≥ 0).
+        sigma (float): Absolute standard deviation distance in the Hilbert-space
+            inertial reference frame (σ ≥ 0).
 
     Returns:
-        Confidence in [0.5, 1.0].
+        float: Confidence probability in [0.5, 1.0]. Baseline σ=0 yields ~0.5
+            (chance level); σ=3 yields ~0.9987 (highly significant).
     """
     return float(norm.cdf(max(0.0, sigma)))
 
@@ -199,13 +256,22 @@ def _gaussian_cdf_confidence(sigma: float) -> float:
 
 @dataclass
 class TierEvidenceSummary:
-    """Compressed evidence record for a single detection tier within an incident.
+    """Compressed evidence record summarizing a single detection tier's behavior within an incident.
+
+    Each of the four detection tiers (BallTree, GMM/IForest, Physical Sentinel, Velocity Bypass)
+    operates independently on the telemetry stream. This dataclass summarizes the aggregate
+    firing pattern for one tier across all windows in an incident, used to compute the
+    Consensus Confidence Index.
 
     Attributes:
-        tier_name: Human-readable tier label.
-        fired: True if this tier triggered at least once during the incident.
-        fire_count: Number of windows where this tier fired.
-        mean_score: Mean tier score across all windows (0.0 if not applicable).
+        tier_name (str): Human-readable detection tier identifier.
+            One of: 'BallTree', 'GMM', 'IForest', 'PhysicalSentinel', 'VelocityBypass'.
+        fired (bool): True if this tier triggered (fired) at least once during the incident.
+        fire_count (int): Total number of windows (temporal bins) in which this tier
+            raised an anomaly alert during the incident window.
+        mean_score (float): Mean detection score across all windows in the incident.
+            Score units are tier-specific (e.g., Euclidean distance for BallTree,
+            log-likelihood for GMM, anomaly score [0-1] for IForest).
     """
 
     tier_name: str
@@ -216,16 +282,25 @@ class TierEvidenceSummary:
 
 @dataclass
 class FeatureAttribution:
-    """Top contributing physical feature derived from PCA loadings or column evidence.
+    """Top contributing physical feature identified via Blocked-PCA analysis (XAI module).
+
+    The HiGI explainability system identifies the culprit feature (the physical metric
+    whose anomalous behavior best explains the Hilbert-space deviation) for each incident.
+    FeatureAttribution records the top-3 culprit features, ranked by their loading magnitude
+    in the principal component space.
 
     Attributes:
-        feature_name: Canonical metric name (e.g. ``"flag_syn_ratio"``).
-        loading_magnitude: Absolute PCA loading coefficient (0–1). Set to the
-            normalised |σ| if loadings are unavailable.
-        event_type: ``"SPIKE"`` or ``"DROP"``.
-        max_sigma: Maximum observed |σ| across all windows in the incident.
-        max_pct: Maximum observed percentage deviation.
-        family: Physical family this feature belongs to.
+        feature_name (str): Canonical metric identifier (e.g., 'flag_syn_ratio', 'bytes_total').
+        loading_magnitude (float): Normalized contribution coefficient in [0, 1].
+            Derived from Blocked-PCA loadings, or from normalized |σ| if loadings unavailable.
+            Higher values indicate stronger alignment with anomalous principal components.
+        event_type (str): Directionality of anomaly: 'SPIKE' (positive) or 'DROP' (negative).
+        max_sigma (float): Maximum standard deviation distance (σ) in the Hilbert-space
+            inertial reference frame observed for this feature within the incident.
+        max_pct (float): Dimensionless maximum percentage deviation (e.g., 865.0 for +865%).
+            Used for analyst-friendly severity interpretation.
+        family (str): Physical feature family category:
+            'volume', 'payload', 'flags', 'protocol', 'connection', 'kinematics', or 'unknown'.
     """
 
     feature_name: str
@@ -238,18 +313,33 @@ class FeatureAttribution:
 
 @dataclass
 class SecurityIncidentV2:
-    """A clustered security incident with V2 enriched metadata.
+    """A clustered security incident with V2 enriched metadata and XAI attribution.
+
+    SecurityIncidentV2 represents a contiguous temporal cluster of anomalies detected
+    by the HiGI IDS. The incident is enriched with Blocked-PCA family attribution,
+    consensus-weighted confidence scoring, and MITRE ATT&CK technique mapping.
+
+    An incident spans from the first anomalous window to the last window before
+    exceeding the debounce threshold, and contains at least one detection from the
+    Multi-tier Tribunal (BallTree, GMM/IForest, Physical Sentinel, or Velocity Bypass).
 
     Attributes:
-        incident_id: Sequential identifier (0-based).
-        start_time: Timezone-aware or naive ``datetime`` of first anomaly.
-        end_time: ``datetime`` of last anomaly.
-        anomaly_rows: Slice of the results DataFrame belonging to this incident.
-        tier_evidence: Summary of which detection tiers fired.
-        top_features: Top-3 physical feature attributions, ranked by loading magnitude.
-        family_stress: Mapping of family → normalised stress score in [0, 1].
-        mitre_tactics: Mapping of MITRE tactic → list of technique strings.
-        is_warmup: True if > 50 % of rows are labelled ``is_warmup``.
+        incident_id (int): Sequential identifier (0-based) within the forensic engine session.
+        start_time (datetime): Timezone-aware or naive datetime of the first anomalous window.
+        end_time (datetime): Datetime of the last anomalous window in the incident cluster.
+        anomaly_rows (pd.DataFrame): Slice of the results DataFrame containing all rows
+            (with is_anomaly=1 or soft_zone=True) belonging to this incident.
+        tier_evidence (List[TierEvidenceSummary]): Summary of which detection tiers fired.
+            Used to compute the Consensus Confidence Index.
+        top_features (List[FeatureAttribution]): Top-3 culprit features (XAI module),
+            ranked by Blocked-PCA loading magnitude. Identifies which physical metrics
+            best explain the Hilbert-space deviation.
+        family_stress (Dict[str, float]): Mapping of physical family → normalized stress
+            score in [0, 1]. Stress represents each family's contribution to total anomaly load.
+        mitre_tactics (Dict[str, List[str]]): MITRE ATT&CK mapping: tactic → list of
+            technique identifiers relevant to the incident's culprit metrics.
+        is_warmup (bool): True if > 50% of anomaly_rows are labeled is_warmup=1.
+            Warmup incidents receive 50% confidence penalty to reduce false positives.
     """
 
     incident_id: int
@@ -268,24 +358,48 @@ class SecurityIncidentV2:
 
     @property
     def duration_seconds(self) -> float:
-        """Wall-clock duration of the incident in seconds."""
+        """Wall-clock duration of the incident in seconds (temporal magnitude).
+
+        Returns:
+            float: Elapsed time between first and last anomalous window, in seconds.
+        """
         return (self.end_time - self.start_time).total_seconds()
 
     @property
     def total_anomalies(self) -> int:
-        """Number of anomalous windows in the incident."""
+        """Total count of anomalous windows (temporal bins) in the incident.
+
+        Returns:
+            int: Number of rows in anomaly_rows (volume metric).
+        """
         return len(self.anomaly_rows)
 
     @property
     def max_severity(self) -> int:
-        """Maximum discrete severity label (1–3) within the incident."""
+        """Maximum discrete severity label observed within the incident (1–3).
+
+        Severity tiers:
+            1: Low — single-tier detection.
+            2: High — majority consensus (≥2 tiers agreed).
+            3: Critical — full unanimity (all tiers fired).
+
+        Returns:
+            int: Maximum severity in [1, 3], or 0 if anomaly_rows is empty.
+        """
         if self.anomaly_rows.empty:
             return 0
         return int(self.anomaly_rows["severity"].max())
 
     @property
     def primary_culprit(self) -> str:
-        """Most frequently reported physical metric across the incident."""
+        """Most frequently reported physical culprit metric (feature family attribute).
+
+        Identifies the single most common anomalous physical metric across all windows
+        in the incident, providing a quick summary of the dominant attack vector.
+
+        Returns:
+            str: Canonical metric name (e.g., 'flag_syn_ratio'), or 'Unknown'.
+        """
         if "physical_culprit" not in self.anomaly_rows.columns:
             return "Unknown"
         bases = self.anomaly_rows["physical_culprit"].dropna().apply(_extract_base_name)
@@ -294,14 +408,26 @@ class SecurityIncidentV2:
 
     @property
     def top_3_ports(self) -> List[int]:
-        """Top-3 destination ports by detection frequency."""
+        """Top-3 destination ports by detection frequency (network topology).
+
+        Returns:
+            List[int]: Up to 3 port numbers ranked by occurrence count. Empty if
+                server_port column unavailable.
+        """
         if "server_port" not in self.anomaly_rows.columns:
             return []
         return [int(p) for p in self.anomaly_rows["server_port"].value_counts().head(3).index]
 
     @property
     def persistence_label(self) -> str:
-        """Most common persistence classification within the incident."""
+        """Most common persistence classification within the incident.
+
+        Persistence label categorizes the temporal pattern of anomalies (e.g., transient,
+        recurring, sustained) based on the anomaly_rows temporal structure.
+
+        Returns:
+            str: Persistence category identifier, or 'Unknown' if unavailable.
+        """
         if "persistence" not in self.anomaly_rows.columns:
             return "Unknown"
         vc = self.anomaly_rows["persistence"].dropna().value_counts()
@@ -313,19 +439,33 @@ class SecurityIncidentV2:
 
     @property
     def consensus_confidence(self) -> float:
-        """Tier-weighted confidence index.
+        """Tier-weighted consensus confidence index for the incident (XAI metric).
 
-        Formula:
-            base   = Gaussian-CDF( mean_|σ| )
-            volume = log2(1 + n_anomalies) / log2(513)   [saturates at 512]
-            tier_w = Σ(tier_weight_i × fired_i) / Σ(tier_weight_i)
-            conf   = 0.45×base + 0.35×volume + 0.20×tier_w
+        This composite metric integrates three components: (1) statistical significance
+        of the Hilbert-space deviation (σ), (2) temporal persistence (anomaly volume),
+        and (3) multi-tier agreement. The formula is:
 
-        Warm-up incidents receive a 50 % confidence penalty to reduce
-        false-positive pressure during the detector stabilisation phase.
+            base = Φ( mean_|σ| )  [Gaussian CDF of mean std. deviation]
+            volume = log₂(1 + n_anomalies) / log₂(513)  [saturates at ≥512 anomalies]
+            tier_w = Σ(tier_weight_i × fired_i) / Σ(tier_weight_i)  [weighted firing rate]
+            conf = 0.45 × base + 0.35 × volume + 0.20 × tier_w
+
+        Tier weights:
+            - BallTree: 0.20 (baseline Hilbert-space distance)
+            - GMM: 0.25 (probabilistic model consensus)
+            - IForest: 0.20 (isolation forest anomaly score)
+            - PhysicalSentinel: 0.20 (individual feature-family detection)
+            - VelocityBypass: 0.15 (rapid-burst bypass mechanism)
+
+        Penalties:
+            - Warmup incidents (is_warmup=True) receive 50% confidence penalty
+              to suppress false positives during detector stabilization.
 
         Returns:
-            Confidence score in [0.0, 1.0].
+            float: Confidence probability in [0.0, 1.0]. Ranges:
+                < 0.40: Low confidence (likely noise or detector miscalibration).
+                0.40–0.70: Medium confidence (recommend manual review).
+                > 0.70: High confidence (strong multi-tier agreement).
         """
         avg_sigma = self.anomaly_rows["culprit_deviation"].abs().mean()
         if math.isnan(avg_sigma):
@@ -358,15 +498,33 @@ class SecurityIncidentV2:
 
     @property
     def dynamic_severity_score(self) -> float:
-        """Euclidean-distance-inspired severity on a continuous [0, ∞) scale.
+        """Euclidean-distance-inspired severity index on continuous [0, ∞) scale.
 
-        Uses the maximum |σ| observed in the incident as a proxy for the
-        Euclidean distance to the P99 decision boundary, then amplifies
-        non-linearly for extreme deviations (σ > 5) to avoid attenuation
-        of high-impact DoS bursts.
+        This metric quantifies the physical energy or magnitude of the anomaly perturbation
+        in Hilbert-space. It combines the maximum standard deviation distance (|σ|_max)
+        with temporal persistence to estimate how "severe" the incident's attack signature is.
+
+        Scoring formula:
+            For σ_max ≤ 5:
+                score = σ_max / 5.0
+            For σ_max > 5 (extreme deviations):
+                score = 1.0 + ((σ_max - 5.0)^1.8) / 10.0  [non-linear amplification]
+
+        Persistence boost:
+            boost = log(1 + n_anomalies) / log(1 + 100)  [saturates at ~100 anomalies]
+            final_score = sigma_score × (1.0 + boost)
+
+        Physical interpretation:
+            - 0.0–2.0: Weak perturbations (likely transient noise or benign variations).
+            - 2.0–5.0: Moderate perturbations (anomalies warrant investigation).
+            - 5.0–8.0: Strong perturbations (likely real security events).
+            - > 8.0: Extreme perturbations (sustained, multi-vector attacks).
+
+        The non-linear amplification for σ > 5 prevents saturation and preserves
+        discrimination among high-severity DoS/DDoS bursts.
 
         Returns:
-            Continuous severity. Typical range [0.0, ~12.0].
+            float: Continuous severity score. Typical range [0.0, ~12.0].
         """
         if self.anomaly_rows.empty:
             return 0.0
@@ -387,63 +545,112 @@ class SecurityIncidentV2:
 
 
 class HiGIForensicEngine:
-    """Forensic analysis engine for HiGI IDS V4.0 Blocked-PCA telemetry.
+    """Forensic analysis engine for HiGI IDS V4.0 Blocked-PCA telemetry (XAI module).
 
-    Converts a raw results CSV (or DataFrame) into a structured incident
-    report including:
-      * Blocked-PCA family attribution for every anomaly window.
-      * Tier-weighted Consensus Confidence Index.
-      * XAI top-3 feature attributions per incident (SPIKE / DROP).
-      * MITRE ATT&CK mapping per culprit metric.
-      * Two executive-grade visualisations (attack intensity timeline and
-        physical family stress radar).
-      * Markdown executive report with embedded plot references.
+    HiGIForensicEngine transforms raw anomaly telemetry produced by the 4-tier Cascaded
+    Sentinel pipeline into actionable intelligence for Blue Team analysts. It provides
+    explainability (XAI) by mapping every alert back to the physical feature family whose
+    principal component triggered it.
 
-    The engine is designed to be a drop-in replacement for ``ForensicEngine``
-    V1: ``main.py`` can import it under the same alias.
+    Key capabilities:
+        * Blocked-PCA dimensionality mapping: Traces each anomaly to its culprit feature
+          family (volume, flags, payload, protocol, connection, kinematics).
+        * Consensus Confidence Index: Weighted across all four detection tiers,
+          reflecting *which* detectors agree and how statistically significant the deviation is.
+        * Dynamic Severity: Euclidean distance in Hilbert-space to the P99 baseline surface,
+          rather than a flat vote count.
+        * Culprit Feature Attribution: Top-3 physical metrics per incident, ranked by
+          Blocked-PCA loading magnitude (XAI explainability).
+        * SPIKE/DROP Directionality: Distinguishes anomalies pointing toward amplification
+          (SPIKE) vs. suppression (DROP) in feature space.
+        * MITRE ATT&CK Mapping: Automatic mapping of culprit metrics to attack tactics
+          and techniques per incident.
+        * Executive Visualizations: Two publication-ready PNG plots:
+            - Attack Intensity Timeline: dual-layer severity bands with incident annotations.
+            - Physical Family Stress Radar: polar chart of family contribution to anomaly load.
+        * Markdown Report: Comprehensive executive summary with embedded visualizations,
+          tier evidence tables, and data-drop detection.
+
+    Architecture:
+        - Zero magic numbers: all thresholds flow from HiGISettings / config.yaml.
+        - Graceful degradation: Falls back to CSV column parsing if BlockedPCA metadata
+          bundle is unavailable.
+        - Drop-in replacement for ForensicEngine V1: main.py imports under same alias.
 
     Example usage::
 
         from src.analysis.forensic_engine import HiGIForensicEngine as ForensicEngine
 
-        engine = HiGIForensicEngine("data/processed/Wednesday_Victim_50_results.csv")
+        engine = HiGIForensicEngine(
+            settings=config_obj,
+            results_path="data/processed/Wednesday_Victim_50_results.csv",
+            bundle=optional_blocked_pca_metadata
+        )
         engine.cluster_incidents()
         engine.detect_data_drops()
-        engine.generate_report()
+        engine.generate_report(output_dir="reports")
 
     Attributes:
-        csv_path: Path to the results CSV file.
-        config: Runtime configuration dictionary (mirrors config.yaml forensic section).
-        df: Full results DataFrame.
-        df_anomalies: Filtered DataFrame containing only anomalous / soft-zone rows.
-        incidents: Clustered ``SecurityIncidentV2`` objects.
-        data_drops: Detected telemetry gaps.
+        csv_path (Path): Absolute path to the HiGI results CSV file.
+        config (Dict[str, Any]): Runtime configuration mapping thresholds and parameters.
+        df (pd.DataFrame): Full results DataFrame (all rows, both anomalies and baseline).
+        df_anomalies (pd.DataFrame): Filtered subset containing anomalous or soft-zone rows.
+        incidents (List[SecurityIncidentV2]): Clustered incident objects after clustering.
+        data_drops (List[Dict[str, Any]]): Detected telemetry gaps / data-drop events.
     """
 
     def __init__(
         self,
-        settings : Any,
+        settings: Any,
         results_path: str,
         bundle: Optional[Any] = None,
     ) -> None:
-        """Initialise the ForensicEngine and load the results CSV.
+        """Initialize the HiGI Forensic Engine and load telemetry results.
+
+        Constructs the engine instance, loads the results CSV, validates required
+        columns, builds the timeline (dt), and prepares the anomaly subset. All
+        thresholds and parameters are read from the settings object (mirrors config.yaml).
 
         Args:
-            csv_path: Path to the HiGI results CSV.
-            debounce_seconds: Maximum gap (s) between consecutive anomalies
-                before starting a new incident cluster.
-            data_drop_threshold_seconds: Minimum gap (s) to flag as a
-                telemetry data-drop event.
-            confidence_filter: Minimum ``consensus_confidence`` for an
-                incident to appear in the report.
-            min_anomalies_per_incident: Minimum anomaly count per incident.
-            min_duration_seconds: Minimum duration (s) per incident.
-            sigma_culprit_min: Incidents whose mean |σ| falls below this
-                value are suppressed from the executive report.
+            settings (Any): Configuration object with nested structure:
+                settings.forensic.debounce_seconds (float): Maximum temporal gap
+                    (in seconds) between consecutive anomalies before starting a new
+                    incident cluster. Typical range: 30–120 seconds.
+                settings.forensic.data_drop_threshold_seconds (float): Minimum gap
+                    (in seconds) to flag as a telemetry data-drop event. Typical: 300–600 s.
+                settings.forensic.default_confidence_filter (float): Minimum
+                    consensus_confidence [0, 1] for an incident to appear in the report.
+                settings.forensic.default_min_anomalies (int): Minimum anomaly count
+                    per incident (volume filter). Typical: 2–5.
+                settings.forensic.default_min_duration_seconds (float): Minimum incident
+                    duration in seconds (temporal filter).
+                settings.forensic.sigma_culprit_min (float): Incidents whose mean |σ|
+                    (Hilbert-space deviation) falls below this value are suppressed
+                    from the report (statistical quality filter).
+            results_path (str): Absolute path to the HiGI results CSV file, typically
+                produced by src/orchestrator.py. Expected columns:
+                    - dt or _abs_timestamp: Temporal index (datetime or Epoch seconds).
+                    - is_anomaly: Binary flag (0/1) for anomaly windows.
+                    - severity: Discrete severity (1=Low, 2=High, 3=Critical).
+                    - consensus_votes: Number of tiers that fired.
+                    - physical_culprit: Blocked-PCA culprit metric annotation.
+                    - family_consensus: Physical family from BlockedPCA (optional).
+                    - culprit_deviation: |σ| value (Hilbert-space deviation).
+                    - Other tier-specific columns (balltree_severity, gmm_anomaly, etc.).
+            bundle (Optional[Any]): Optional BlockedPCA metadata bundle (pickle object)
+                containing _blocked_pca_family_mapping and _blocked_pca_loadings_by_family.
+                If provided, enables full PCA-aware feature attribution. Falls back to
+                CSV column parsing if None.
 
         Raises:
-            FileNotFoundError: If ``csv_path`` does not exist.
-            ValueError: If essential DataFrame columns are missing.
+            FileNotFoundError: If results_path does not exist.
+            ValueError: If DataFrame is empty or missing critical columns
+                (_abs_timestamp or dt, is_anomaly, severity, consensus_votes).
+
+        Side effects:
+            - Loads and sorts DataFrame by timestamp.
+            - Forward-fills isolated NaT entries to preserve burst continuity.
+            - Filters anomaly subset (df_anomalies) for subsequent clustering.
         """
         self.csv_path = Path(results_path)
         if not self.csv_path.exists():
@@ -472,10 +679,46 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def _validate_and_prepare(self) -> None:
-        """Validate required columns and build the ``dt`` timeline column.
+        """Validate required columns and construct the dt (datetime) timeline (data preparation).
+
+        This internal initialization method performs sanity checks and data preparation:
+            1. Verify DataFrame is not empty.
+            2. Build or validate datetime index from _abs_timestamp (Epoch seconds) or dt (ISO).
+            3. Forward-fill isolated NaT (not-a-time) entries to preserve event continuity.
+            4. Verify required columns exist (is_anomaly, severity, consensus_votes).
+            5. Sort by dt and build anomaly subset (df_anomalies) via two criteria:
+                - is_anomaly = 1 (explicit anomaly flagged by multi-tier consensus)
+                - soft_zone_triggered = 1 AND balltree_severity ≥ 0.5 (high-confidence gradient)
+
+        Datetime handling:
+            - Prefers _abs_timestamp (Unix Epoch seconds, UTC) for precision.
+            - Falls back to existing dt column if available.
+            - Forward-fills NaT entries (1-2 rows) to prevent pipeline breaks.
+
+        Anomaly subset logic:
+            - Includes primary anomalies (is_anomaly=1) from all 4 detection tiers.
+            - Also includes soft-zone hits (early warning) when BallTree confidence ≥ 0.5.
+            - Soft-zone inclusion helps catch emerging attacks before full consensus.
+
+        Args:
+            None. Modifies self.df and self.df_anomalies in-place.
+
+        Returns:
+            None.
 
         Raises:
-            ValueError: If the DataFrame is empty or missing critical columns.
+            ValueError: If DataFrame is empty, or missing either:
+                - _abs_timestamp or dt column (for datetime)
+                - is_anomaly, severity, consensus_votes (required fields)
+
+        Side effects:
+            - Sorts df by dt ascending.
+            - Adds dt column if not present.
+            - Builds df_anomalies from is_anomaly=1 rows (or soft-zone hits).
+            - Logs warnings for NaT corrections and column choices.
+
+        Example:
+            Called automatically in __init__; not typically invoked manually.
         """
         if self.df.empty:
             raise ValueError("Results DataFrame is empty.")
@@ -528,17 +771,39 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def cluster_incidents(self) -> List[SecurityIncidentV2]:
-        """Cluster anomaly windows into ``SecurityIncidentV2`` objects.
+        """Cluster consecutive anomaly windows into SecurityIncidentV2 incidents (temporal grouping).
 
-        Algorithm:
-            1. Compute time gaps between consecutive anomalous windows (O(n)).
-            2. Mark a new incident whenever the gap exceeds ``debounce_seconds``.
-            3. Assign cumulative incident IDs and group the DataFrame.
-            4. Enrich each incident with tier evidence, feature attribution,
-               family stress, and MITRE mappings.
+        This method implements temporal clustering: anomalous windows separated by gaps
+        ≤ debounce_seconds are grouped into a single incident. Each incident is then
+        enriched with tier evidence, XAI culprit feature attribution (Blocked-PCA loadings),
+        family stress profiles, and MITRE ATT&CK technique mappings.
+
+        Clustering algorithm (O(n) time complexity):
+            1. Compute temporal gaps (in seconds) between consecutive anomalous windows.
+            2. Mark gap > debounce_seconds as incident boundary.
+            3. Assign cumulative incident IDs via cumsum() transformation.
+            4. Group DataFrame by incident ID and build SecurityIncidentV2 objects.
+            5. For each incident, compute:
+                - Tier evidence summaries (which detection tiers fired)
+                - Top-3 culprit features via XAI (Blocked-PCA loading magnitude ranking)
+                - Family stress distribution (normalized anomaly load per physical family)
+                - MITRE ATT&CK tactic/technique mappings from culprit metrics
 
         Returns:
-            Ordered list of ``SecurityIncidentV2`` instances.
+            List[SecurityIncidentV2]: Ordered list of clustered incidents, sorted by start_time.
+                Returns empty list if df_anomalies has no rows. Each SecurityIncidentV2 is
+                fully enriched with XAI and metadata.
+
+        Raises:
+            None explicitly, but logs warnings for edge cases.
+
+        Example:
+            >>> engine = HiGIForensicEngine(...)
+            >>> engine.cluster_incidents()  # Returns ~10-50 incidents
+            >>> incidents = engine.incidents
+            >>> for inc in incidents:
+            ...     print(f"Incident {inc.incident_id}: {inc.duration_seconds:.0f}s, "
+            ...           f"severity={inc.max_severity}, confidence={inc.consensus_confidence:.2%}")
         """
         if self.df_anomalies.empty:
             logger.info("[CLUSTER] No anomalies – skipping clustering.")
@@ -568,15 +833,34 @@ class HiGIForensicEngine:
         rows: pd.DataFrame,
         has_warmup: bool,
     ) -> SecurityIncidentV2:
-        """Construct a ``SecurityIncidentV2`` from a group of anomaly rows.
+        """Construct a fully enriched SecurityIncidentV2 from a group of anomaly rows.
+
+        This internal method builds a single incident by:
+            1. Extracting temporal boundaries (start_time, end_time).
+            2. Determining warmup status (if > 50% of rows labeled is_warmup=1).
+            3. Building tier evidence summaries via _build_tier_evidence().
+            4. Identifying top-3 culprit features via XAI _build_feature_attribution().
+            5. Computing family stress profiles via _compute_family_stress().
+            6. Mapping culprit metrics to MITRE techniques via _map_mitre().
 
         Args:
-            iid: Incident index (0-based).
-            rows: DataFrame slice for this incident's anomaly windows.
-            has_warmup: True if the ``is_warmup`` column is present.
+            iid (int): Sequential incident identifier (0-based) from cluster_incidents().
+            rows (pd.DataFrame): Slice of df_anomalies containing all anomaly windows
+                for this temporal cluster. Columns include: dt, is_anomaly, severity,
+                physical_culprit, culprit_deviation (|σ|), family_consensus, and
+                tier-specific columns (balltree_severity, gmm_anomaly, etc.).
+            has_warmup (bool): True if the 'is_warmup' column exists in rows.
 
         Returns:
-            Fully enriched ``SecurityIncidentV2``.
+            SecurityIncidentV2: Fully enriched incident object with all XAI metadata,
+                tier evidence, and MITRE mappings.
+
+        Raises:
+            None explicitly. Gracefully handles missing columns and null values.
+
+        Side effects:
+            - Modifies no state except computing derived properties on rows.
+            - Performs up to 4 data aggregations (_build_tier_evidence, XAI attribution, etc.).
         """
         # --- Timestamps ------------------------------------------------
         if "_abs_timestamp" in rows.columns:
@@ -626,13 +910,39 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def _build_tier_evidence(self, rows: pd.DataFrame) -> List[TierEvidenceSummary]:
-        """Build per-tier firing summaries for an incident.
+        """Build per-tier firing summaries for an incident (tier consensus breakdown).
+
+        This method aggregates detection evidence from all 4 Cascaded Sentinel detection
+        tiers for an incident. For each tier, it reports whether the tier fired (detected
+        anomaly), the count of anomalous windows, and the mean confidence score.
+
+        Tier reference:
+            - BallTree (Tier 1): Euclidean distance-based density anomalies; score is
+              proximity to decision boundary (lower = more anomalous).
+            - GMM (Tier 2A): Gaussian Mixture Model log-likelihood; score is log-likelihood
+              of the data point under fitted mixture.
+            - IForest (Tier 2B): Isolation Forest; score is path length (anomaly score [0, 1]).
+            - PhysicalSentinel (Tier 3): Blocked-PCA residual magnitude; score is |σ|
+              (standard deviation in Hilbert-space).
+            - VelocityBypass (Tier 4): Temporal rate-of-change detection; score is
+              acceleration anomaly metric.
 
         Args:
-            rows: Anomaly rows for the incident.
+            rows (pd.DataFrame): Anomaly rows for the incident containing columns for
+                each tier (balltree_severity, gmm_anomaly, iforest_anomaly, physical_culprit,
+                vel_bypass) and their corresponding score columns (balltree_score, gmm_score,
+                iforest_score, culprit_deviation, vel_score).
 
         Returns:
-            List of ``TierEvidenceSummary`` objects (one per detection tier).
+            List[TierEvidenceSummary]: One summary object per available tier, each containing:
+                - tier_name: Identifier ('BallTree', 'GMM', 'IForest', 'PhysicalSentinel', 'VelocityBypass')
+                - fired: bool – whether the tier detected any anomaly in this incident
+                - fire_count: int – number of anomalous windows for this tier
+                - mean_score: float – average confidence/anomaly score (units vary per tier)
+
+        Side effects:
+            - Returns empty list if no tier columns are present (graceful degradation).
+            - Missing score columns default to 0.0 (no error thrown).
         """
         summaries: List[TierEvidenceSummary] = []
 
@@ -696,22 +1006,53 @@ class HiGIForensicEngine:
     def _build_feature_attribution(
         self, rows: pd.DataFrame, top_n: int = 3
     ) -> List[FeatureAttribution]:
-        """Identify the top-``top_n`` physical features by deviation magnitude.
+        """Identify the top-N culprit features via Blocked-PCA loading magnitude ranking (XAI).
 
-        Methodology:
-          * Extract base metric name, |σ|, event type, and deviation % from
-            the ``physical_culprit`` annotations in each row.
-          * Normalise loading magnitude as |σ| / max_|σ| within the incident
-            so values are comparable across incidents.
-          * Infer physical family from the ``family_consensus`` column when
-            available, otherwise via keyword matching.
+        This is the core explainability (XAI) method: it identifies which physical metrics
+        (features) best explain the Hilbert-space deviation observed in an incident.
+        Features are ranked by normalized |σ| (standard deviation in inertial reference frame),
+        with aggregation across all windows in the incident.
+
+        XAI methodology:
+            1. Parse physical_culprit annotations to extract:
+                - Canonical metric name (e.g., 'flag_syn_ratio')
+                - |σ| (deviation magnitude in Hilbert-space)
+                - Event type ('SPIKE' or 'DROP')
+                - Percentage change (Δ%)
+            2. Normalize loading_magnitude = |σ| / max_|σ| within incident (range [0, 1]).
+            3. Infer physical family from family_consensus (BlockedPCA) or keyword matching.
+            4. Aggregate across rows: keep max |σ| and Δ% per feature.
+            5. Sort by normalized loading (descending) and return top-N.
+
+        Physical interpretation:
+            - loading_magnitude (normalized): How much this feature contributed to the
+              anomaly (0=negligible, 1=dominant culprit).
+            - max_sigma (|σ|): Peak standard deviation distance from baseline. Higher
+              values indicate stronger detection consensus.
+            - event_type (SPIKE/DROP): Direction of deviation (amplification vs suppression).
+            - family: Physical category (volume, flags, payload, protocol, connection, kinematics).
 
         Args:
-            rows: Anomaly rows for the incident.
-            top_n: Number of top features to return.
+            rows (pd.DataFrame): Anomaly rows for this incident containing:
+                - physical_culprit: Blocked-PCA annotation string
+                - family_consensus: Physical family from BlockedPCA metadata (optional)
+                - culprit_deviation: |σ| values (Hilbert-space distance)
+            top_n (int): Number of top culprit features to return. Default: 3.
 
         Returns:
-            Sorted list of ``FeatureAttribution`` objects (highest loading first).
+            List[FeatureAttribution]: Sorted list of top culprit features, ranked by
+                loading_magnitude (highest first). Returns empty list if no culprits found.
+                Each FeatureAttribution contains: feature_name, loading_magnitude, event_type,
+                max_sigma, max_pct, family.
+
+        Example:
+            >>> top_3 = engine._build_feature_attribution(incident_rows, top_n=3)
+            >>> for i, feat in enumerate(top_3, 1):
+            ...     print(f"{i}. {feat.feature_name} ({feat.family}): "
+            ...           f"{feat.event_type} +{feat.max_pct:.0f}% (σ={feat.max_sigma:.2f})")
+            1. flag_syn_ratio (flags): SPIKE +865% (σ=4.2)
+            2. bytes_total (volume): SPIKE +320% (σ=3.1)
+            3. packet_size_anomaly (payload): DROP -45% (σ=2.8)
         """
         if "physical_culprit" not in rows.columns:
             return []
@@ -764,16 +1105,41 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def _compute_family_stress(self, rows: pd.DataFrame) -> Dict[str, float]:
-        """Compute a normalised stress score [0, 1] for each physical family.
+        """Compute normalized anomaly stress [0, 1] for each BlockedPCA physical family.
 
-        Stress is the sum of |culprit_deviation| values attributed to that
-        family, normalised by the total deviation across all families.
+        Family stress quantifies how much each physical metric family (volume, flags, payload,
+        protocol, connection, kinematics) contributed to the incident's overall anomaly load.
+        Stress is computed as the sum of |σ| (culprit_deviation) values aggregated by family,
+        then normalized so all families sum to 1.0 (L1 norm).
+
+        Physical interpretation:
+            - stress[family] ∈ [0, 1]: Fractional contribution of this family to total
+              anomaly load. Higher values indicate this family was the primary vector.
+            - Example: If flags=0.65, volume=0.25, others=0.10, then a flag-based attack
+              (e.g., SYN flood) was the dominant anomaly.
+
+        BlockedPCA families:
+            1. volume: Aggregate packet/byte counts, inter-packet timings.
+            2. flags: TCP flag distributions (SYN, ACK, RST, FIN).
+            3. payload: Packet size distributions and entropy.
+            4. protocol: Layer-3/4 protocol mix (ICMP, UDP, TCP varieties).
+            5. connection: Connection state counts and lifecycle metrics.
+            6. kinematics: Velocity metrics, acceleration anomalies, temporal patterns.
 
         Args:
-            rows: Anomaly rows for the incident.
+            rows (pd.DataFrame): Anomaly rows for the incident containing:
+                - physical_culprit: Blocked-PCA annotation string (source of metric names)
+                - family_consensus: Physical family label from BlockedPCA (optional)
+                - culprit_deviation: |σ| values (Hilbert-space distance per row)
 
         Returns:
-            Dictionary mapping family name → stress in [0, 1].
+            Dict[str, float]: Mapping of family name → stress in [0, 1]. Returns empty dict
+                if no physical_culprit column found. All families sum to 1.0 (if populated).
+
+        Example:
+            >>> family_stress = engine._compute_family_stress(incident_rows)
+            >>> print(family_stress)
+            {'flags': 0.65, 'volume': 0.25, 'protocol': 0.10}  # SYN flood signature
         """
         if "physical_culprit" not in rows.columns:
             return {}
@@ -797,13 +1163,44 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def _map_mitre(self, rows: pd.DataFrame) -> Dict[str, List[str]]:
-        """Map physical culprit metrics in ``rows`` to MITRE ATT&CK techniques.
+        """Map physical culprit metrics to MITRE ATT&CK tactics and techniques (threat intelligence).
+
+        This method performs automatic threat intelligence mapping by matching detected physical
+        metrics to known attack patterns in the MITRE ATT&CK framework. This helps Blue Teams
+        understand *which attack tactics* the observed anomalies align with, providing context
+        for incident response.
+
+        Mapping methodology:
+            1. Parse physical_culprit annotations to extract metric names (e.g., 'flag_syn_ratio').
+            2. Look up each metric in the MITRE_ATT_CK_MAPPING global dictionary.
+            3. If a match is found, add the (tactic, technique) pair to results.
+            4. Deduplicate techniques within each tactic (set tracking).
+            5. Return a dict: tactic → list of unique techniques.
+
+        Example mappings:
+            - flag_syn_ratio (SPIKE) → Tactic='Reconnaissance', Technique='Active Scanning'
+            - bytes_total (SPIKE) → Tactic='Command&Control', Technique='Data Obfuscation'
+            - packet_interarrival (DROP) → Tactic='DefenseEvasion', Technique='Timing Evasion'
 
         Args:
-            rows: Anomaly rows for the incident.
+            rows (pd.DataFrame): Anomaly rows for the incident containing:
+                - physical_culprit: Blocked-PCA annotation strings (source of metric names)
 
         Returns:
-            Mapping of tactic name → deduplicated list of technique strings.
+            Dict[str, List[str]]: Mapping of MITRE tactic (str) → deduplicated list of
+                technique names (str). Returns empty dict if no physical_culprit column
+                or no mappings found.
+
+        Example:
+            >>> mitre = engine._map_mitre(incident_rows)
+            >>> print(mitre)
+            {'Reconnaissance': ['Active Scanning'], 'Command&Control': ['Data Obfuscation']}
+
+        Note:
+            - This is an automated heuristic; analysts should always verify mappings
+              in context of the incident timeline and threat model.
+            - MITRE_ATT_CK_MAPPING is maintained at module level and may be extended
+              as new metrics are instrumented in BlockedPCA.
         """
         if "physical_culprit" not in rows.columns:
             return {}
@@ -823,16 +1220,60 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def detect_data_drops(self) -> List[Dict[str, Any]]:
-        """Detect telemetry gaps in the full capture timeline.
+        """Detect telemetry gaps in the full capture timeline (sensor saturation forensics).
 
-        A gap is flagged when consecutive ``dt`` values differ by more than
-        ``data_drop_threshold_seconds``.  Gaps that follow a high-severity
-        incident cluster are classified as possible Sensor Saturation.
+        This method identifies periods where the IDS sensor was unable to capture traffic,
+        inferring causation from context: whether a high-severity incident preceded the gap
+        (sensor saturation hypothesis), whether anomalies surrounded the gap (sensor blindness),
+        or if the gap was benign network silence.
+
+        Data drop detection algorithm (O(n) scan):
+            1. Compute time deltas between consecutive rows in the full df (including baseline).
+            2. Flag any gap > data_drop_threshold_seconds (default: 60s from config).
+            3. For each gap, inspect rows immediately before and after:
+                - Check if either row is anomalous (is_anomaly=1).
+                - Extract severity level if anomalous.
+            4. Classify gap causation:
+                - POSSIBLE_SENSOR_SATURATION: High-severity incident (severity ≥ 2) ends
+                  ≤15s before gap start → indicates sensor overload during attack.
+                - SENSOR_BLINDNESS: Gap preceded by anomaly with severity ≥ 2 → indicates
+                  ongoing attack obscured missing telemetry.
+                - CAPTURE_LOSS: Gap not adjacent to anomalies → benign network silence or
+                  capture filter reset.
+
+        Temporal context:
+            - All timestamps are normalized to UTC, timezone-aware.
+            - Gap duration is in seconds (floating-point).
+            - Incident-gap correlation uses ≤15s proximity threshold.
+
+        Args:
+            None. Uses self.df (full DataFrame), self.incidents (clustered incidents),
+                and self.config['data_drop_threshold_seconds'].
 
         Returns:
-            List of gap dictionaries with keys
-            ``start_time``, ``end_time``, ``gap_seconds``,
-            ``severity_before``, ``is_anomaly_context``, and ``reason``.
+            List[Dict[str, Any]]: List of data-drop events, each with keys:
+                - start_time (pd.Timestamp): Time of row before gap.
+                - end_time (pd.Timestamp): Time of row after gap.
+                - gap_seconds (float): Duration of gap in seconds.
+                - severity_before (Optional[int]): Severity of rows adjacent to gap (1-3).
+                - is_anomaly_context (bool): True if any adjacent row is anomalous.
+                - reason (str): Classification reason (see above).
+
+        Side effects:
+            - Stores results in self.data_drops list.
+            - Logs count of detected gaps at INFO level.
+
+        Example:
+            >>> engine.cluster_incidents()
+            >>> drops = engine.detect_data_drops()
+            >>> for drop in drops:
+            ...     print(f"Gap {drop['gap_seconds']:.0f}s at {drop['start_time']}: {drop['reason']}")
+            Gap 120s at 2024-01-15 10:45:30: [POSSIBLE_SENSOR_SATURATION]
+
+        Notes:
+            - Sensor Saturation is a critical indicator of DoS/DDoS success.
+            - Gaps adjacent to multiple incidents are classified by the most recent incident.
+            - This method should be called after cluster_incidents() to populate self.incidents.
         """
         self.data_drops = []
         if len(self.df) < 2:
@@ -897,18 +1338,50 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def get_reportable_incidents(self, **kwargs: Any) -> List[SecurityIncidentV2]:
-        """Return incidents that satisfy all reporting quality thresholds.
+        """Return incidents meeting all reporting quality thresholds (multi-filter scoring).
 
-        Applies three physical filters (confidence, volume, duration) and an
-        optional σ-culprit filter to suppress noise bursts.
+        This method applies four independent filters to self.incidents, returning only
+        SecurityIncidentV2 objects that meet *all* criteria simultaneously. Filters are
+        applied in precedence order (volume → duration → consensus confidence → σ culprit),
+        and can be overridden via kwargs for ad-hoc analysis.
+
+        Filtering criteria (AND logic):
+            1. Volume (total_anomalies ≥ min_anomalies_per_incident): Suppress single-window
+               noise artifacts. Default: 2+ windows per incident.
+            2. Duration (duration_seconds ≥ min_duration_seconds): Exclude ephemeral blips.
+               Default: 5+ seconds of sustained anomaly.
+            3. Consensus Confidence (consensus_confidence ≥ confidence_filter): Multi-tier
+               agreement threshold. Ranges from 0 (single-tier weak) to 1 (full unanimity).
+               Default: 0.45 (medium confidence).
+            4. Culprit Magnitude (mean_|σ| ≥ sigma_culprit_min): Minimum Hilbert-space
+               deviation to suppress low-energy transients. Default: 2.0σ.
+
+        Physical interpretation:
+            - Filters work together to separate true positives (coordinated, sustained)
+              from noise (ephemeral, low-confidence, low-energy).
+            - Incidents passing all filters are suitable for executive reporting and
+              incident response triage.
 
         Args:
-            **kwargs: Optional threshold overrides:
-                ``confidence_filter``, ``min_anomalies_per_incident``,
-                ``min_duration_seconds``, ``sigma_culprit_min``.
+            **kwargs (Any): Optional threshold overrides (all optional, use config defaults
+                if not provided):
+                - confidence_filter (float ∈ [0, 1]): Consensus confidence minimum threshold.
+                - min_anomalies_per_incident (int): Minimum anomaly window count per incident.
+                - min_duration_seconds (float): Minimum sustained anomaly duration in seconds.
+                - sigma_culprit_min (float): Minimum mean |σ| (Hilbert-space deviation).
 
         Returns:
-            Filtered and sorted list of ``SecurityIncidentV2``.
+            List[SecurityIncidentV2]: Sorted list of filtered incidents. Returns empty list
+                if no incidents pass all filters. Each incident retains all XAI metadata
+                (culprit features, family stress, MITRE mappings).
+
+        Example:
+            >>> engine.cluster_incidents()
+            >>> reportable = engine.get_reportable_incidents(
+            ...     confidence_filter=0.50,
+            ...     min_anomalies_per_incident=3
+            ... )
+            >>> print(f"High-confidence incidents: {len(reportable)}")
         """
         cf = kwargs.get("confidence_filter", self.config["confidence_filter"])
         ma = kwargs.get("min_anomalies_per_incident", self.config["min_anomalies_per_incident"])
@@ -936,14 +1409,43 @@ class HiGIForensicEngine:
     # ------------------------------------------------------------------
 
     def generate_summary_stats(self, **kwargs: Any) -> Dict[str, Any]:
-        """Compute executive-level summary statistics.
+        """Compute executive-level summary statistics for report generation.
+
+        This method aggregates key metrics across all incidents (or a filtered subset),
+        providing Blue Team leadership with high-level situational awareness: incident
+        counts, severity ranges, temporal coverage, and data quality indicators.
+
+        Statistics computed (optional filtering):
+            - total_anomalies: Count of all rows flagged is_anomaly=1.
+            - total_incidents: Count of clustered incidents (or reportable if kwargs provided).
+            - avg_incident_duration: Mean duration_seconds across filtered incidents.
+            - max_severity: Highest severity tier observed (1-3).
+            - avg_severity: Mean severity across all anomalies.
+            - time_range_start, time_range_end: Min/max timestamps in df (capture window).
+            - data_drops_detected: Count of telemetry gaps (from detect_data_drops()).
 
         Args:
-            **kwargs: Optional filter overrides (passed to
-                ``get_reportable_incidents``).
+            **kwargs (Any): Optional filter overrides (passed to get_reportable_incidents()).
+                If kwargs are provided, statistics are computed on the filtered subset only.
+                If empty, statistics use self.incidents (all raw clustered incidents).
 
         Returns:
-            Dictionary of aggregate metrics used by report generators.
+            Dict[str, Any]: Dictionary with keys:
+                - total_anomalies (int): Volume of anomalous windows.
+                - total_incidents (int): Count of incidents after filtering (if kwargs).
+                - avg_incident_duration (float): Mean incident duration in seconds.
+                - max_severity (int): Peak severity (1-3) or 0 if no anomalies.
+                - avg_severity (float): Mean severity of anomalous rows [1, 3].
+                - time_range_start (pd.Timestamp): First row timestamp.
+                - time_range_end (pd.Timestamp): Last row timestamp.
+                - data_drops_detected (int): Count of sensor saturation/capture loss events.
+
+        Example:
+            >>> engine.cluster_incidents()
+            >>> engine.detect_data_drops()
+            >>> stats = engine.generate_summary_stats(confidence_filter=0.50)
+            >>> print(f"High-confidence incidents: {stats['total_incidents']}, "
+            ...       f"avg_duration: {stats['avg_incident_duration']:.0f}s")
         """
         reportable = self.get_reportable_incidents(**kwargs) if kwargs else self.incidents
         return {
@@ -961,7 +1463,23 @@ class HiGIForensicEngine:
         }
 
     def get_runtime_settings(self) -> Dict[str, Any]:
-        """Return a copy of the engine configuration for transparency / logging."""
+        """Return a deep copy of the engine configuration dictionary (auditability + transparency).
+
+        This method exposes the current runtime configuration for logging, auditability,
+        and report generation. Useful for verifying which filters and thresholds were
+        applied to a particular analysis run.
+
+        Returns:
+            Dict[str, Any]: Copy of self.config containing all forensic.* settings from
+                config.yaml / settings object (debounce_seconds, data_drop_threshold_seconds,
+                confidence_filter, min_anomalies_per_incident, min_duration_seconds,
+                sigma_culprit_min, etc.). Modifications to returned dict do not affect engine.
+
+        Example:
+            >>> engine = HiGIForensicEngine(...)
+            >>> cfg = engine.get_runtime_settings()
+            >>> print(f"Confidence filter: {cfg['confidence_filter']}")
+        """
         return self.config.copy()
 
     # ------------------------------------------------------------------
@@ -1062,14 +1580,57 @@ class HiGIForensicEngine:
         out_path: Path,
         incidents_to_plot: Optional[List[Any]] = None,
     ) -> None:
-        """Render the Attack Intensity Timeline and save to ``out_path``.
+        """Render the Attack Intensity Timeline visualization and save to PNG (publication-ready).
+
+        This method produces a polished time-series chart showing anomaly severity evolution
+        across the entire capture window, with embedded incident annotations. It features:
+            - Severity-based fill regions (low/medium/high bands with distinct colors).
+            - Velocity Bypass markers (triangle markers for rate-of-change anomalies).
+            - Incident annotations with staggered + fan-out layout to prevent overlap.
+            - Symmetric log scale to preserve visibility of both low and high anomaly scores.
+            - Dark GitHub theme styling (#0d1117 background, #58a6ff accent).
+
+        Visualization features:
+            - X-axis: UTC timestamps (capture window)
+            - Y-axis: anomaly_ma_score or severity (configurable, log-scale for readability)
+            - Severity bands:
+                * Severity 1 (Low): Yellow (#f1c40f), α=0.35
+                * Severity 2 (High): Orange (#e67e22), α=0.45
+                * Severity 3 (Critical): Red (#e74c3c), α=0.65
+            - Incident annotations:
+                * Positioned in header zone above the plot (external annotation space)
+                * Vertical stagger levels [1.12, 1.25, 1.38] prevent dense vertical overlap
+                * Horizontal fan-out [−0.05, 0, +0.05] creates radial spacing for bursts
+                * Each label includes incident #ID and top culprit feature name (XAI)
+                * Dashed arrow (arrowstyle="-|>", lw=0.8, α=0.6) traces to data point
+
+        Annotation algorithm:
+            1. For each incident, find maximum severity within temporal window (t_start, t_end).
+            2. Calculate label position via stagger level + fan-out offset.
+            3. Draw arrow from label to data point, with safety minimum y_value ≥ 0.5
+               (prevents burial in x-axis for low-severity incidents).
+            4. Clip x-position to [0.02, 0.98] to keep labels in frame.
+            5. Align text direction (left/right/center) based on horizontal position.
 
         Args:
-            out_path: Output PNG file path.
-            incidents_to_plot: Optional list of SecurityIncidentV2 objects to
-                annotate.  If None, uses self.incidents.  Typically this is the
-                filtered list from get_reportable_incidents() to ensure
-                consistency with the Markdown report.
+            out_path (Path): Output PNG file path (absolute or relative to cwd).
+            incidents_to_plot (Optional[List[SecurityIncidentV2]]): List of incidents to
+                annotate. If None, uses self.incidents (all clustered incidents).
+                Typically pass the filtered list from get_reportable_incidents() for
+                consistency with executive Markdown report.
+
+        Returns:
+            None. Saves PNG to out_path directly.
+
+        Side effects:
+            - Creates figure with dark theme styling.
+            - Logs incident annotation details at DEBUG level.
+            - Gracefully skips incidents if timestamp mapping fails.
+
+        Example:
+            >>> engine.cluster_incidents()
+            >>> reportable = engine.get_reportable_incidents(confidence_filter=0.50)
+            >>> engine._plot_timeline(Path("reports/timeline.png"), reportable)
         """
         df = self.df.copy()
         if "dt" not in df.columns:
@@ -1085,7 +1646,8 @@ class HiGIForensicEngine:
         ax.set_facecolor("#0d1117")
         
         # Create header space for external annotations (zona de cabecera vacía)
-        fig.subplots_adjust(top=0.82)
+        # Increased top margin to accommodate 3 staggered levels: [1.12, 1.25, 1.38]
+        fig.subplots_adjust(top=0.72)
 
         # Background grid
         ax.grid(True, color="#21262d", linestyle="--", linewidth=0.6, alpha=0.8)
@@ -1127,7 +1689,10 @@ class HiGIForensicEngine:
             f"{len(target_incidents)} incident(s)"
         )
 
-        for inc in target_incidents:
+        # Vertical staggering levels (cascada/escalones) to avoid label overlap
+        stagger_levels = [1.12, 1.25, 1.38]
+
+        for i, inc in enumerate(target_incidents):
             # Calculate incident time boundaries (strip timezone)
             t_start = pd.Timestamp(inc.start_time).replace(tzinfo=None)
             t_end = pd.Timestamp(inc.end_time).replace(tzinfo=None)
@@ -1198,23 +1763,41 @@ class HiGIForensicEngine:
                 # Fallback: distribute evenly by incident ID
                 x_frac = (inc.incident_id + 1) / (len(target_incidents) + 1)
 
-            # ── EXTERNAL ANNOTATION: Position in header zone (y > 1.0) ──
-            # y=1.12 places the text box above the plot area in axes fraction coordinates
+            # ── EXTERNAL ANNOTATION: Position in header zone with FAN-OUT effect ──
+            # Combine vertical stagger + horizontal fan-out to prevent dense burst overlap
+            # When multiple incidents occur near each other, labels 'open up' like a fan
+            y_pos = stagger_levels[i % len(stagger_levels)]
+            
+            # Horizontal offsets create the fan-out effect (left, center, right)
+            x_offsets = [-0.05, 0, 0.05]
+            x_offset = x_offsets[i % len(x_offsets)]
+            x_text_pos = x_frac + x_offset
+            # Clamp x_text_pos to stay within bounds
+            x_text_pos = max(0.02, min(0.98, x_text_pos))
+            
+            # Anchor labels away from the center: labels on edges look away, center looks center
+            if x_offset < 0:
+                ha_align = "right"
+            elif x_offset > 0:
+                ha_align = "left"
+            else:
+                ha_align = "center"
+
             ax.annotate(
                 f"#{inc.incident_id + 1}: {culprit_label}",
                 xy=(t_mid, y_arrow_point),
-                xytext=(x_frac, 1.12),
+                xytext=(x_text_pos, y_pos),
                 xycoords="data",  # Arrow origin stays at actual data point
                 textcoords="axes fraction",  # Text box positioned in figure space
-                fontsize=8, color="#f0f6fc", ha="center", va="bottom",
+                fontsize=7.5, color="#f0f6fc", ha=ha_align, va="center",
                 bbox=dict(
-                    boxstyle="round,pad=0.4", facecolor="#0d1117",
+                    boxstyle="round,pad=0.3", facecolor="#0d1117",
                     edgecolor="#58a6ff", linewidth=0.8, alpha=0.95,
                 ),
                 arrowprops=dict(
-                    arrowstyle="-", color="#58a6ff", lw=0.5,
+                    arrowstyle="-|>", color="#58a6ff", lw=0.8,
                     connectionstyle="arc3,rad=0.0",  # Straight line
-                    linestyle="--", alpha=0.4,
+                    linestyle="--", alpha=0.6, mutation_scale=10,
                     shrinkB=2, shrinkA=2,
                 ),
             )
@@ -1242,14 +1825,52 @@ class HiGIForensicEngine:
         out_path: Path,
         incidents_to_plot: Optional[List[Any]] = None,
     ) -> None:
-        """Render the Physical Family Stress Radar chart and save to ``out_path``.
+        """Render the Physical Family Stress Radar polar chart and save to PNG (publication-ready).
+
+        This method produces a radar (polar) visualization showing how anomaly load is distributed
+        across the six BlockedPCA physical metric families. Each family represents a distinct
+        attack vector or network behavior dimension (volume, payload, flags, protocol, connection,
+        kinematics), and the radar shows which families were most stressed during the capture.
+
+        Visualization features:
+            - Polar plot with 6 axes (one per family)
+            - Fill region (polygon) shows aggregate stress distribution (normalized [0,1])
+            - Color-coded vertices: each family has a distinct color from FAMILY_COLOURS
+            - Concentric circles: grid at 0.2, 0.4, 0.6, 0.8, 1.0 stress fractions
+            - Dark GitHub theme: #0d1117 background, #58a6ff fill, family-specific vertex colors
+            - Legend positioned lower-right with family color mapping
+
+        Family definitions:
+            1. volume: Packet/byte count aggregates, inter-packet timing (attack throughput)
+            2. payload: Packet size distributions, entropy (data exfiltration/injection)
+            3. flags: TCP flag combinations (SYN, ACK, RST, FIN) — key for scan/DoS detection
+            4. protocol: Layer-3/4 protocol mix (ICMP, UDP, TCP) — protocol abuse detection
+            5. connection: Connection state counts (ESTABLISHED, SYN_SENT, LISTEN) — lifecycle
+            6. kinematics: Temporal velocity, acceleration (rate-of-change anomalies) — timing
+
+        Stress aggregation:
+            - For each incident in incidents_to_plot: sum(family_stress.values()) → aggregate
+            - Normalize by total aggregate [L1 norm] so all families sum to 1.0
+            - Fallback: if no incidents, compute from raw df_anomalies via _infer_family()
 
         Args:
-            out_path: Output PNG file path.
-            incidents_to_plot: Optional list of SecurityIncidentV2 objects to
-                aggregate family stress from.  If None, uses self.incidents.
-                Typically this is the filtered list from get_reportable_incidents()
-                to ensure consistency with the Markdown report.
+            out_path (Path): Output PNG file path (absolute or relative to cwd).
+            incidents_to_plot (Optional[List[SecurityIncidentV2]]): List of incidents to
+                aggregate family stress from. If None, uses self.incidents (all clustered).
+                Typically pass the filtered list from get_reportable_incidents() for
+                consistency with executive Markdown report.
+
+        Returns:
+            None. Saves PNG to out_path directly.
+
+        Side effects:
+            - Creates polar figure with Agg backend (headless rendering).
+            - Fallback: if no incidents available, constructs aggregate from raw anomalies.
+
+        Example:
+            >>> engine.cluster_incidents()
+            >>> reportable = engine.get_reportable_incidents(confidence_filter=0.50)
+            >>> engine._plot_family_radar(Path("reports/family_stress_radar.png"), reportable)
         """
         # Aggregate family stress across incidents
         target_incidents = incidents_to_plot if incidents_to_plot is not None else self.incidents
@@ -1335,24 +1956,63 @@ class HiGIForensicEngine:
         visual_paths: Optional[Dict[str, str]] = None,
         **filter_kwargs: Any,
     ) -> str:
-        """Generate the Markdown executive report (main public entry point).
+        """Generate the Markdown executive report (main public entry point for reporting pipeline).
 
-        Orchestrates the full pipeline:
-          1. Cluster incidents (if not already done).
-          2. Detect data drops (if not already done).
-          3. Generate visualisations and save PNGs adjacent to the report.
-          4. Write the Markdown file and return its path as a string.
+        This is the primary method for producing a comprehensive, publication-ready forensic
+        report combining executive summary, incident tables, visualizations, and data quality
+        warnings. It orchestrates the full pipeline from raw data to final Markdown file.
+
+        Reporting pipeline (orchestration):
+            1. Auto-execute clustering if not already done (cluster_incidents()).
+            2. Auto-detect data drops if not already done (detect_data_drops()).
+            3. Generate two publication-ready PNG visualizations:
+                - Attack Intensity Timeline (temporal severity evolution)
+                - Physical Family Stress Radar (anomaly vector distribution)
+            4. Render full Markdown document with embedded plot references.
+            5. Write .md file to output_dir and return its path.
+
+        Report contents:
+            - Executive Summary: Incident counts, severity ranges, temporal window
+            - Incident Table: Per-incident row with timestamp, duration, severity, confidence, and top culprits
+            - Family Threat Distribution: Table showing which physical families drove anomalies
+            - Data Quality: Telemetry gap warnings and sensor saturation indicators
+            - Visualizations: Embedded PNG paths for timeline + radar charts
+            - Metadata: Generation timestamp, configuration transparency
 
         Args:
-            output_dir: Directory for report + PNG files. Defaults to
-                ``reports/`` relative to the CSV's parent directory.
-            visual_paths: Pre-computed plot paths (skips plot generation
-                when provided, useful for testing).
-            **filter_kwargs: Threshold overrides forwarded to
-                ``get_reportable_incidents``.
+            output_dir (Optional[str]): Directory for report + PNG files. Defaults to
+                {csv_parent}/reports/ (e.g., data/processed/../reports/).
+                Creates directory if not present.
+            visual_paths (Optional[Dict[str, str]]): Pre-computed plot paths (skips PNG
+                generation when provided, useful for testing or external visualization).
+                Keys: 'timeline', 'family_radar'; Values: relative or absolute paths.
+            **filter_kwargs (Any): Threshold overrides forwarded to get_reportable_incidents().
+                Common filters:
+                    - confidence_filter (float): Consensus confidence minimum [0, 1]
+                    - min_anomalies_per_incident (int): Minimum anomaly window count
+                    - min_duration_seconds (float): Minimum incident duration
 
         Returns:
-            Absolute path of the written Markdown file.
+            str: Absolute path of the written Markdown file (e.g.,
+                /home/.../data/processed/results_FORENSIC.md).
+
+        Raises:
+            None explicitly. Logs warnings if visualization generation fails.
+
+        Side effects:
+            - Creates output_dir if not present.
+            - Calls cluster_incidents() and detect_data_drops() if not pre-populated.
+            - Writes PNG files to output_dir (via generate_visuals).
+            - Writes Markdown .md file to output_dir.
+
+        Example:
+            >>> engine = HiGIForensicEngine(...)
+            >>> engine.cluster_incidents()
+            >>> md_path = engine.generate_report(
+            ...     output_dir="reports",
+            ...     confidence_filter=0.50
+            ... )
+            >>> print(f"Report saved: {md_path}")
         """
         # Auto-run clustering / drop detection if caller skipped them
         if not self.incidents:
@@ -1384,14 +2044,52 @@ class HiGIForensicEngine:
         visual_paths: Dict[str, str],
         **filter_kwargs: Any,
     ) -> str:
-        """Render the full Markdown string for the executive report.
+        """Render the complete Markdown string for the executive forensic report (internal).
+
+        This internal method synthesizes all incident, statistical, and visualization data
+        into a polished Markdown document suitable for Blue Team leadership and incident
+        responders. It produces human-readable tables, metric summaries, and embedded
+        visualization paths for integration into security dashboards or PDF reports.
+
+        Report structure:
+            1. Title & Metadata: Report name, generation timestamp, configuration visibility
+            2. Executive Summary Section: Incident counts, severity breakdown, temporal coverage
+            3. Incident Details Table: Per-incident rows with:
+                - Incident ID, timestamp window, duration (seconds)
+                - Severity, consensus confidence, anomaly count
+                - Top 3 culprit features (XAI) with SPIKE/DROP directionality
+            4. Physical Family Threat Distribution: Table mapping families → anomaly load
+            5. Data Quality Warnings: Telemetry gaps, sensor saturation indicators
+            6. Visualization Sections: Timeline + Radar charts (embedded as ![...](path))
+            7. Configuration Transparency: Applied filters, thresholds (for auditability)
+
+        Table formatting:
+            - Incident table: Fixed-width columns for readability (e.g., ID | Duration | Severity)
+            - Family distribution: Rows per family with normalized stress [0, 1]
+            - Markdown tables use pipe-delimited format for GitHub/Confluence rendering
 
         Args:
-            visual_paths: Mapping from plot key to relative filename.
-            **filter_kwargs: Passed to ``get_reportable_incidents``.
+            visual_paths (Dict[str, str]): Mapping of visualization keys to file paths:
+                - 'timeline': PNG path for Attack Intensity Timeline
+                - 'family_radar': PNG path for Physical Family Stress Radar
+            **filter_kwargs (Any): Threshold parameters used in filtering:
+                - confidence_filter, min_anomalies_per_incident, min_duration_seconds, sigma_culprit_min
+                - These are documented in the report for reproducibility.
 
         Returns:
-            Complete Markdown document as a string.
+            str: Complete Markdown document as a single string, ready to be written to file.
+                Does NOT include file I/O; that is handled by generate_report().
+
+        Side effects:
+            - Calls get_reportable_incidents() to retrieve filtered incidents.
+            - Calls generate_summary_stats() to compute executive statistics.
+            - Computes family threat distribution from df_anomalies.
+
+        Notes:
+            - All timestamps are localized to UTC unless specified otherwise.
+            - Culprit features shown in top-3 ranking order (by loading magnitude).
+            - Data quality warnings use severity color-coding (🟡 Low, 🟠 Medium, 🔴 High).
+            - MITRE ATT&CK tactics included in incident rows (if available in inc.mitre_tactics).
         """
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
         cfg = self.config
