@@ -47,6 +47,7 @@ import matplotlib
 matplotlib.use("Agg")  # headless – no GUI required
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -1082,6 +1083,9 @@ class HiGIForensicEngine:
         fig, ax = plt.subplots(figsize=(15, 5))
         fig.patch.set_facecolor("#0d1117")
         ax.set_facecolor("#0d1117")
+        
+        # Create header space for external annotations (zona de cabecera vacía)
+        fig.subplots_adjust(top=0.82)
 
         # Background grid
         ax.grid(True, color="#21262d", linestyle="--", linewidth=0.6, alpha=0.8)
@@ -1181,22 +1185,37 @@ class HiGIForensicEngine:
                 else "?"
             )
 
-            # ── DYNAMIC 3-LEVEL OFFSET: Prevents text overlap via staggering ──
-            y_offset = [40, 70, 100][inc.incident_id % 3]
+            # ── POSITION CALCULATION: Map timestamp to axes fraction ──
+            # Calculate relative position in the x-axis for external annotation placement
+            try:
+                x_min, x_max = ax.get_xlim()
+                # Convert pandas Timestamp to numeric (matplotlib date number)
+                t_mid_numeric = mdates.date2num(t_mid)
+                x_frac = (t_mid_numeric - x_min) / (x_max - x_min)
+                # Clamp to valid range [0, 1]
+                x_frac = max(0.05, min(0.95, x_frac))
+            except Exception:
+                # Fallback: distribute evenly by incident ID
+                x_frac = (inc.incident_id + 1) / (len(target_incidents) + 1)
 
+            # ── EXTERNAL ANNOTATION: Position in header zone (y > 1.0) ──
+            # y=1.12 places the text box above the plot area in axes fraction coordinates
             ax.annotate(
                 f"#{inc.incident_id + 1}: {culprit_label}",
                 xy=(t_mid, y_arrow_point),
-                xytext=(0, y_offset), textcoords="offset points",
-                fontsize=8, color="#f0f6fc", ha="center",
+                xytext=(x_frac, 1.12),
+                xycoords="data",  # Arrow origin stays at actual data point
+                textcoords="axes fraction",  # Text box positioned in figure space
+                fontsize=8, color="#f0f6fc", ha="center", va="bottom",
                 bbox=dict(
-                    boxstyle="round,pad=0.3", facecolor="#21262d",
-                    edgecolor="#58a6ff", linewidth=1, alpha=0.8,
+                    boxstyle="round,pad=0.4", facecolor="#0d1117",
+                    edgecolor="#58a6ff", linewidth=0.8, alpha=0.95,
                 ),
                 arrowprops=dict(
-                    arrowstyle="->", color="#58a6ff",
-                    lw=0.8, connectionstyle="arc3,rad=0.2",
-                    shrinkB=5,  # Prevent arrow from touching exact data point
+                    arrowstyle="-", color="#58a6ff", lw=0.5,
+                    connectionstyle="arc3,rad=0.0",  # Straight line
+                    linestyle="--", alpha=0.4,
+                    shrinkB=2, shrinkA=2,
                 ),
             )
 
