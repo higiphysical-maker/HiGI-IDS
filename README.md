@@ -17,6 +17,57 @@ Central a esta arquitectura es el concepto de **Marco de Referencia Inercial** (
 ### Proyección al Espacio de Hilbert ($\mathcal{H}$)
 Para resolver la alta dimensionalidad y la naturaleza no lineal del tráfico (distribuciones log-normales y bimodales), HiGI implementa una proyección a una variedad de datos reducida denominada **Espacio de Hilbert**. El pipeline de preprocesamiento aplica una transformación de **Yeo-Johnson** seguida de un **Análisis de Componentes Principales (PCA) con blanqueamiento (whitening)**. Este proceso garantiza que la varianza sea unitaria en todas las dimensiones proyectadas, logrando que la distancia euclidiana en $\mathcal{H}$ sea un estimador fiel de la disimilitud semántica y equivalga matemáticamente a la distancia de Mahalanobis.
 
+``` mermaid
+mindmap
+  root((HiGI IDS v4.0))
+    ::icon(fa fa-microchip)
+    (Fundamentos Conceptuales)
+      {{Logica Fisica}}
+        Trafico como campo continuo
+        Estado de reposo empirico
+      {{Marco de Referencia Inercial}}
+        Baseline del Lunes congelado
+        Invarianza de escala Mahalanobis
+      {{Espacio de Hilbert}}
+        Variedad de datos proyectada
+        Geometria de estados
+    (Pipeline de Procesamiento)
+      {{Ingestion}}
+        PcapProcessor optime v2.3.0
+        Ventanas temporales de 1s
+      {{Preprocesamiento}}
+        Yeo-Johnson Gaussianizacion
+        Standardization Media Cero
+      {{Proyeccion de Hilbert}}
+        Blocked-PCA Preservacion Semantica
+        Whiten True Invarianza Distancia
+    (Arquitectura Multi-Tier Sentinel)
+      {{Tier 1 Portero Geometrico}}
+        BallTree k-NN en Hilbert
+        Filtrado inicial P99
+      {{Tier 2 Tribunal Probabilistico}}
+        GMM Bayesiano Densidad local
+        Isolation Forest Estructura
+      {{Tier 3 Centinela Fisico}}
+        GMM Univariante por feature
+        Veto del Portero 20 sigma
+      {{Tier 4 Valvula de Emergencia}}
+        Velocity Bypass Rolling Z-score
+        Deteccion de Transicion de Regimen
+    (Inteligencia Forense XAI)
+      {{Atribucion Causal}}
+        Culprit Feature Desviacion Maxima
+        Polaridad SPIKE y DROP
+      {{Familias Fisicas}}
+        Volume Flags Payload
+        Connection Kinematics Protocol
+      {{Gestion de Alertas}}
+        Debounce 30s RFC 6298
+        Dynamic Severity Score DSS
+      {{Mapeo MITRE ATT&CK}}
+        Inferencia de Tacticas
+        Robustez ante cifrado TLS
+```
 ---
 
 ## 🏗️ Arquitectura de Detección en Cascada (Multi-Tier Sentinel)
