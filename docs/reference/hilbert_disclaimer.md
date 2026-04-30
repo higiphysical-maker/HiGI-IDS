@@ -13,20 +13,20 @@ In concrete engineering terms, HiGI's "Hilbert space" is a finite-dimensional Eu
 
 ```mermaid
 graph TD
-    A["<b>Raw Features</b><br>x<sub>t</sub> ∈ ℝ<sup>42</sup><br><i>(RobustScaler-normalised)</i>"]
+    A["<b>Raw Features</b><br>xₜ ∈ ℝ⁴²<br><i>(RobustScaler-normalised)</i>"]
     
-    A -->|"<b>Yeo-Johnson PowerTransformer</b><br><i>(per-feature Gaussianisation)</i>"| B
+    A -->|"Yeo-Johnson PowerTransformer<br>(per-feature Gaussianisation)"| B
     
-    B["<b>Gaussian Marginals</b><br>x̃<sub>t</sub> ∈ ℝ<sup>42</sup><br><i>(Approximately Gaussian)</i>"]
+    B["<b>Gaussian Marginals</b><br>x̃ₜ ∈ ℝ⁴²<br><i>(Approximately Gaussian)</i>"]
     
-    B -->|"<b>Blocked PCA per physical family</b><br><i>(decorrelation + whitening)</i><br>Family f: z<sub>t</sub><sup>(f)</sup> = W<sup>(f)T</sup>(x̃<sub>t</sub><sup>(f)</sup> − μ<sub>0</sub><sup>(f)</sup>)"| C
+    B -->|"Blocked PCA per physical family<br>(decorrelation + whitening)<br>Family f: zₜ⁽ᶠ⁾ = W⁽ᶠ⁾ᵀ(x̃ₜ⁽ᶠ⁾ − μ₀⁽ᶠ⁾)"| C
     
-    C["<b>Whitened Hilbert Space</b><br>z<sub>t</sub> ∈ ℝ<sup>k</sup><br><i>(k ≤ 42, whitened principal components)</i>"]
+    C["<b>Whitened Hilbert Space</b><br>zₜ ∈ ℝᵏ<br><i>(k ≤ 42, whitened principal components)</i>"]
     
-    C -->|"<b>Tribunal Consensus</b><br><i>(Baseline displacement)</i>"| D["<b>Physical Displacement Analysis</b>"]
+    C -->|"Tribunal Consensus<br>(Baseline displacement)"| D["<b>Physical Displacement Analysis</b>"]
 ```
 
-The resulting space `ℝ^k` has the property that:
+The resulting space `ℝᵏ` has the property that:
 
 1. **Euclidean distances approximate Mahalanobis distances** in the original feature space, because the Blocked PCA whitening effectively applies the inverse square root of the per-family covariance matrix.
 2. **Each principal component maps to exactly one physical family**, because Blocked PCA operates independently per family. This is the property that makes forensic attribution possible: the PCA component that deviates most from the baseline can be directly traced back to its feature family.
