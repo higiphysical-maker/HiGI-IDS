@@ -34,7 +34,9 @@ Traditional Intrusion Detection Systems operate on a **signature catalog**: a cu
 
 HiGI takes a different approach. Instead of asking "does this traffic match a known attack?", it asks: "Is this traffic statistically consistent with the normal physiology of this network?"
 
-Network flows are treated as multi-dimensional physical observables — velocity, payload continuity, connection kinematics, protocol ratios — and projected into a reduced metric space where anomaly detection becomes a geometric and probabilistic problem. Anomalies are measured in standard deviations (σ) from a learned baseline: a unit that is physically interpretable and threshold-agnostic across different network environments.
+Network flows are treated as multi-dimensional physical observables — velocity, payload continuity, connection kinematics, protocol ratios — and projected into a reduced metric space where anomaly detection becomes a geometric and probabilistic problem.   
+We call this reduced space "Hilbert space" as a nod to quantum mechanics([why?](docs/reference/hilbert_disclaimer.md)). In practice, it is a finite-dimensional Euclidean space obtained via Blocked PCA with whitening, where Euclidean distance approximates the Mahalanobis distance from the baseline — making σ‑deviations geometrically meaningful.  
+Anomalies are measured in standard deviations (σ) from a learned baseline: a unit that is physically interpretable and threshold-agnostic across different network environments.
 
 ### The Tribunal of Consensus
 
@@ -318,15 +320,6 @@ python main.py report \
 ```
 Generates a Markdown report and a PDF report with incident timeline, MITRE ATT&CK mapping, and physical stress radar charts.
 
-### 4. Full Pipeline (Train → Detect → Report)
-
-```bash
-python main.py run \
-        --source data/raw/Wednesday.pcap \
-        --bundle models/baseline_monday.pkl \
-        --output data/processed/ \
-```
-
 ---
 
 ##  Pipeline Execution Showcase
@@ -405,12 +398,12 @@ The complete parameter surface is documented inline in `config.yaml`. Key sectio
 
 HiGI is developed to professional open-source standards suitable for research publication, SOC integration, and community contribution.
 
-- Style: PEP 8 enforced throughout all source modules
-- Type Safety: Full static type hinting on all public interfaces
-- Documentation: Google‑style docstrings on all public classes and methods
-- Configuration: Zero magic numbers — all parameters in config.yaml, validated at startup
-- Language: English‑only source code, comments, docstrings, and commit messages
-- Modularity: Ingestion, model, analysis, and orchestration layers are independently testable and replaceable
+- **Style:** PEP 8 enforced throughout all source modules.
+- **Type Safety:** Full static type hinting on all public interfaces.
+- **Documentation:** Google‑style docstrings on all public classes and methods.
+- **Configuration:** Zero magic numbers — all parameters in `config.yaml`, validated at startup.
+- **Language:** English‑only source code, comments, docstrings, and commit messages.
+- **Modularity:** Ingestion, model, analysis, and orchestration layers are independently testable and replaceable.
 
 ---
 
@@ -440,7 +433,7 @@ HiGI is designed for **honest engineering**. The following limitations are docum
 - **Interpretable forensic output** — every alert includes a physical culprit (feature + σ-deviation + directionality), enabling analyst triage without black-box trust
 - **Unsupervised operation** — only a clean baseline PCAP is required for deployment; no labelled attack data is needed.
 - **100% Recall on CIC-IDS2017 DoS/DDoS campaigns** with ≤ 1 minute detection latency
-- **0 reportable false positives on 8 hours of benign control traffic** (Monday session).
+- **0 reportable false positives on 8 hours of benign control traffic (266 sub‑threshold transients suppressed)** (Monday session).
 
 ### Validation Scope
 
@@ -467,5 +460,5 @@ MIT License — see [`LICENSE`](./LICENSE) for full terms.
 
 ---
 
-*HiGI IDS — Created and Developed by Pablo Aguadero. 2026 with AI-augmented engineering (free version) for logic validation and architectural optimization.*
+*HiGI IDS — Created and Developed by Pablo Aguadero, 2026. Built with the assistance of free-tier AI tools (Gemini, Claude, Copilot) for architectural iteration, code review, and documentation drafting. All design decisions, physical models, and validation protocols are original work by the author.*
 *Validated against CIC-IDS2017. Reference: Engelen, G., Rimmer, V., & Joosen, W. (2021). Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case Study. IEEE EuroS&PW. doi:10.1109/EuroSPW54576.2021.00015*
