@@ -74,35 +74,87 @@ Version: 4.0.0
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
-import yaml  # Importación ligera para leer el archivo antes que el resto
+import yaml  # Lightweight YAML parsing before heavy imports
 
-# 1. Localizar el archivo de configuración
+# ============================================================================
+# ZERO-TRUST THREAD CONTROL: PRE-FLIGHT CHECK
+# ============================================================================
+# This section runs BEFORE any scipy/numpy/sklearn/polars imports to establish
+# thread limits at the OS level. See: https://github.com/joblib/joblib/issues/1001
+# and https://joblib.readthedocs.io/en/latest/parallel.html#bad-interaction-of-multiprocessing
+
 _ROOT = Path(__file__).parent
 config_path = _ROOT / "config.yaml"
 
-# 2. Lectura "Pre-flight" de los hilos
+def _detect_available_cores() -> int:
+    """Detect available CPU cores, respecting cgroups (container constraints)."""
+    try:
+        import psutil
+        return psutil.cpu_count(logical=True)
+    except ImportError:
+        try:
+            return os.sysconf('SC_NPROCESSORS_ONLN') or 4
+        except (AttributeError, ValueError):
+            return 4
+
+def _configure_thread_environment(n_jobs: int) -> None:
+    """
+    Configure thread limits for all BLAS/LAPACK libraries.
+    
+    Thread hierarchy (Zero-Trust model):
+    - joblib spawns N worker processes (n_jobs from config.yaml)
+    - Each worker MUST use exactly 1 BLAS thread (enforced via threadpoolctl later)
+    - This prevents nested parallelism: joblib(N) × BLAS(N) = N² threads
+    
+    Args:
+        n_jobs: Number of joblib workers (from config.yaml ingestion.n_jobs)
+    """
+    # Force single-threaded BLAS/LAPACK in parent process
+    # (Child processes get their own limits via threadpoolctl context manager)
+    blas_threads = "1"
+    
+    env_vars = {
+        "OMP_NUM_THREADS": blas_threads,          # OpenMP (GCC/Intel)
+        "MKL_NUM_THREADS": blas_threads,          # Intel MKL
+        "OPENBLAS_NUM_THREADS": blas_threads,     # OpenBLAS
+        "VECLIB_MAXIMUM_THREADS": blas_threads,   # Apple Accelerate
+        "NUMEXPR_NUM_THREADS": blas_threads,      # Numexpr
+        "POLARS_MAX_THREADS": str(n_jobs),        # Polars reads via separate workers
+        "RAYON_NUM_THREADS": str(n_jobs),         # Polars internal Rust parallelism
+        "JOBLIB_START_METHOD": "forkserver",      # Avoid copy-on-write memory bloat
+    }
+    
+    for var, val in env_vars.items():
+        os.environ[var] = val
+    
+    print(
+        f"[PREFLIGHT] Thread limits set:\n"
+        f"  Parent BLAS threads: {blas_threads}\n"
+        f"  Joblib workers: {n_jobs}\n"
+        f"  Joblib start method: forkserver (prevents virtual memory bloat)\n"
+        f"  Polars parallelism: {n_jobs}"
+    )
+
+# 1. Parse config.yaml to extract n_jobs
 try:
     with open(config_path, "r") as f:
         temp_cfg = yaml.safe_load(f)
-        # Buscamos la clave ingestion -> n_jobs (ajusta según tu estructura)
-        n_jobs = str(temp_cfg.get("ingestion", {}).get("n_jobs", 4))
+        n_jobs_cfg = temp_cfg.get("ingestion", {}).get("n_jobs", 4)
         
-        # Si el valor es -1 (auto), lo dejamos en 4 para el Notebook o detectamos cores
-except Exception:
-    n_jobs = "4" # Fallback de seguridad
+        # Handle -1 (auto-detect) case
+        if n_jobs_cfg == -1:
+            n_jobs = _detect_available_cores()
+            print(f"[PREFLIGHT] n_jobs=-1 (auto), detected {n_jobs} cores")
+        else:
+            n_jobs = int(n_jobs_cfg)
+except Exception as e:
+    print(f"[WARNING] Failed to read config.yaml: {e}. Using n_jobs=4 (safe fallback)")
+    n_jobs = 4
 
-# 3. Configuración del entorno ANTES de los imports pesados
-print(f"[INFO] Setting OMP_NUM_THREADS={n_jobs} based on config.yaml")
-import os
-os.environ["OMP_NUM_THREADS"] = n_jobs
-os.environ["MKL_NUM_THREADS"] = n_jobs
-os.environ["OPENBLAS_NUM_THREADS"] = n_jobs
-os.environ["VECLIB_MAXIMUM_THREADS"] = n_jobs
-os.environ["NUMEXPR_NUM_THREADS"] = n_jobs
-os.environ["POLARS_MAX_THREADS"] = n_jobs
-os.environ["RAYON_NUM_THREADS"] = n_jobs   
-os.environ["JOBLIB_START_METHOD"] = "forkserver" 
+# 2. Configure environment (must happen before heavy imports)
+_configure_thread_environment(n_jobs) 
 
 
 import argparse

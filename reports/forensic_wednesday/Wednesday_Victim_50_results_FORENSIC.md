@@ -1,6 +1,6 @@
 # HiGI IDS — Forensic Security Incident Report
 
-> **Generated:** 2026-04-27 10:45:16 UTC  
+> **Generated:** 2026-04-30 11:56:15 UTC  
 > **Source file:** `Wednesday_Victim_50_results.csv`  
 > **Analysis window:** 2017-07-05 11:42:42 → 2017-07-05 20:08:17
 
@@ -11,30 +11,30 @@
 | Incident debounce | 30 s | Maximum gap for grouping consecutive anomalies |
 | Data-drop threshold | 60 s | Gap size flagged as sensor blindness |
 | Confidence filter | 80% | Minimum tier-weighted confidence for reporting |
-| Min anomalies/incident | 3 | Alert-fatigue suppression floor |
+| Min anomalies/incident | 1 | Alert-fatigue suppression floor |
 | Min duration | 1.0 s | Minimum incident duration |
 | Min σ culprit | 2.0 | Minimum mean \|σ\| to include in report |
 
 ## Executive Summary
 
-- **Total anomalous windows detected:** 3,599
-- **Reportable incidents after filtering:** 9
+- **Total anomalous windows detected:** 3,597
+- **Reportable incidents after filtering:** 8
 - **Maximum severity:** 3/3 (Critical — Full unanimity)
-- **Average severity:** 1.79/3
-- **Average incident duration:** 527.0 s
+- **Average severity:** 1.82/3
+- **Average incident duration:** 597.7 s
 - **Telemetry data-drops detected:** 19
 
 ## Physical Family Stress Distribution
 
 | Family | Anomaly Count | Share | Interpretation |
 |--------|--------------|-------|----------------|
-| **Flags** | 1,242 | 34.5% | TCP-flag manipulation — possible SYN/RST/FIN flood or stealth scan |
-| **Connection** | 1,034 | 28.7% | Connection-topology anomaly — port-scan, service discovery |
-| **Volume** | 768 | 21.3% | Bandwidth/PPS overload — volumetric DoS or data exfiltration |
-| **Payload** | 318 | 8.8% | Payload anomaly — obfuscation, encryption or protocol tunnelling |
-| **Kinematics** | 140 | 3.9% | Rate/volatility anomaly — beaconing, slow-rate attack or burst |
-| **Volume_flood** | 56 | 1.6% | – |
-| **Slow_attack** | 25 | 0.7% | – |
+| **Flags** | 1,245 | 34.6% | TCP-flag manipulation — possible SYN/RST/FIN flood or stealth scan |
+| **Connection** | 1,056 | 29.4% | Connection-topology anomaly — port-scan, service discovery |
+| **Volume** | 773 | 21.5% | Bandwidth/PPS overload — volumetric DoS or data exfiltration |
+| **Payload** | 319 | 8.9% | Payload anomaly — obfuscation, encryption or protocol tunnelling |
+| **Kinematics** | 118 | 3.3% | Rate/volatility anomaly — beaconing, slow-rate attack or burst |
+| **Volume_flood** | 44 | 1.2% | – |
+| **Slow_attack** | 26 | 0.7% | – |
 | **Protocol** | 16 | 0.4% | Protocol-ratio shift — possible protocol abuse or evasion |
 
 ## Visual Evidence
@@ -58,12 +58,12 @@
 | Field | Value |
 |-------|-------|
 | **Start (UTC)** | 2017-07-05 12:26:02 |
-| **End (UTC)** | 2017-07-05 12:30:13 |
-| **Duration** | 251 s |
-| **Anomalous windows** | 52 |
-| **Max severity** | 2/3 — High — Majority consensus |
-| **Dynamic severity score** | 10.44 |
-| **Consensus confidence** | 84.3% |
+| **End (UTC)** | 2017-07-05 12:33:15 |
+| **Duration** | 434 s |
+| **Anomalous windows** | 79 |
+| **Max severity** | 3/3 — Critical — Full unanimity |
+| **Dynamic severity score** | 11.57 |
+| **Consensus confidence** | 86.6% |
 | **Persistence label** | Sustained Attack |
 | **Top-3 destination ports** | 443, 54646, 22 |
 | **Warm-up period** | No |
@@ -72,11 +72,11 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 35 | 0.9364 |
-| GMM | ✅ | 13 | 0.6731 |
-| IForest | ✅ | 19 | 0.2456 |
-| PhysicalSentinel | ✅ | 52 | 4.1382 |
-| VelocityBypass | — | 0 | 0.1799 |
+| BallTree | ✅ | 57 | 1.0204 |
+| GMM | ✅ | 25 | 0.7215 |
+| IForest | ✅ | 26 | 0.2396 |
+| PhysicalSentinel | ✅ | 79 | 4.5440 |
+| VelocityBypass | — | 0 | 0.1747 |
 
 #### Top-3 Physical Feature Attributions (XAI)
 
@@ -84,7 +84,7 @@
 |------|---------|--------|-----------|--------|--------|---------|
 | 1 | `iat_mean` | Connection | ⬆ SPIKE | 14.60σ | 5099% | 1.000 |
 | 2 | `unique_dst_ports` | Connection | ⬆ SPIKE | 8.22σ | 4964% | 0.563 |
-| 3 | `pps_momentum` | Volume | ⬆ SPIKE | 5.42σ | 1013% | 0.371 |
+| 3 | `flag_rst_ratio` | Kinematics | ⬆ SPIKE | 6.48σ | 6021% | 0.444 |
 
 #### MITRE ATT&CK Mapping
 
@@ -99,57 +99,12 @@
   - T1190 – Exploit Public-Facing Application (Slow DoS)
   - T1498.001 – UDP Flood / Amplification
   - T1498 – Volumetric PPS Volatility
-- **Exfiltration**
-  - T1048 – Oversized Packet Exfiltration
-
-### Incident #21
-
-| Field | Value |
-|-------|-------|
-| **Start (UTC)** | 2017-07-05 12:30:52 |
-| **End (UTC)** | 2017-07-05 12:33:15 |
-| **Duration** | 144 s |
-| **Anomalous windows** | 26 |
-| **Max severity** | 2/3 — High — Majority consensus |
-| **Dynamic severity score** | 10.05 |
-| **Consensus confidence** | 80.5% |
-| **Persistence label** | Sustained Attack |
-| **Top-3 destination ports** | 443, 54646, 137 |
-| **Warm-up period** | No |
-
-#### Tier Evidence
-
-| Tier | Fired | Fire Count | Mean Score |
-|------|-------|-----------|------------|
-| BallTree | ✅ | 21 | 1.1465 |
-| GMM | ✅ | 15 | 0.8077 |
-| IForest | ✅ | 11 | 0.2905 |
-| PhysicalSentinel | ✅ | 26 | 5.0023 |
-| VelocityBypass | — | 0 | 0.1671 |
-
-#### Top-3 Physical Feature Attributions (XAI)
-
-| Rank | Feature | Family | Event Type | Max \|σ\| | Max Δ% | Loading |
-|------|---------|--------|-----------|--------|--------|---------|
-| 1 | `iat_mean` | Connection | ⬆ SPIKE | 14.15σ | 4942% | 1.000 |
-| 2 | `flag_rst_ratio` | Flags | ⬆ SPIKE | 6.48σ | 6021% | 0.458 |
-| 3 | `port_scan_ratio` | Connection | ⬆ SPIKE | 4.97σ | 402% | 0.351 |
-
-#### MITRE ATT&CK Mapping
-
-- **Command & Control**
-  - T1071 – Beaconing / Irregular IAT
-- **Reconnaissance**
-  - T1595.001 – Active Scanning: IP Addresses
-  - T1595 – Active Scanning (Stealth FIN Scan)
-- **Exfiltration**
-  - T1048 – Oversized Packet Exfiltration
-- **Impact**
   - T1498 – Resource Exhaustion: Bandwidth Volatility
   - T1499.002 – DoS: Endpoint Service (RST Flood)
-  - T1498.001 – UDP Flood / Amplification
+- **Exfiltration**
+  - T1048 – Oversized Packet Exfiltration
 
-### Incident #29
+### Incident #27
 
 | Field | Value |
 |-------|-------|
@@ -168,9 +123,9 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 1307 | 1.3244 |
-| GMM | ✅ | 211 | 0.9902 |
-| IForest | ✅ | 1240 | 0.4842 |
+| BallTree | ✅ | 1307 | 1.3304 |
+| GMM | ✅ | 164 | 0.9902 |
+| IForest | ✅ | 864 | 0.3750 |
 | PhysicalSentinel | ✅ | 1320 | 3.4856 |
 | VelocityBypass | ✅ | 3 | 0.2091 |
 
@@ -200,7 +155,7 @@
 - **Exfiltration**
   - T1048 – Oversized Packet Exfiltration
 
-### Incident #31
+### Incident #29
 
 | Field | Value |
 |-------|-------|
@@ -209,7 +164,7 @@
 | **Duration** | 917 s |
 | **Anomalous windows** | 731 |
 | **Max severity** | 3/3 — Critical — Full unanimity |
-| **Dynamic severity score** | 745.77 |
+| **Dynamic severity score** | 748.84 |
 | **Consensus confidence** | 100.0% |
 | **Persistence label** | Sustained Attack |
 | **Top-3 destination ports** | 80, 56326, 54722 |
@@ -219,18 +174,18 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 688 | 1.8471 |
-| GMM | ✅ | 547 | 0.9412 |
-| IForest | ✅ | 537 | 0.4255 |
-| PhysicalSentinel | ✅ | 731 | 7.0130 |
+| BallTree | ✅ | 688 | 1.8557 |
+| GMM | ✅ | 493 | 0.9412 |
+| IForest | ✅ | 541 | 0.4412 |
+| PhysicalSentinel | ✅ | 731 | 7.0134 |
 | VelocityBypass | ✅ | 8 | 0.2213 |
 
 #### Top-3 Physical Feature Attributions (XAI)
 
 | Rank | Feature | Family | Event Type | Max \|σ\| | Max Δ% | Loading |
 |------|---------|--------|-----------|--------|--------|---------|
-| 1 | `icmp_ratio` | Protocol | ⬆ SPIKE | 102.77σ | 612530% | 1.000 |
-| 2 | `iat_mean` | Connection | ⬆ SPIKE | 45.69σ | 15960% | 0.445 |
+| 1 | `icmp_ratio` | Protocol | ⬆ SPIKE | 102.80σ | 611480% | 1.000 |
+| 2 | `iat_mean` | Connection | ⬆ SPIKE | 45.69σ | 15960% | 0.444 |
 | 3 | `bytes` | Volume | ⬆ SPIKE | 43.86σ | 10095% | 0.427 |
 
 #### MITRE ATT&CK Mapping
@@ -251,7 +206,7 @@
 - **Exfiltration**
   - T1048 – Oversized Packet Exfiltration
 
-### Incident #32
+### Incident #30
 
 | Field | Value |
 |-------|-------|
@@ -270,9 +225,9 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 132 | 5.3816 |
-| GMM | ✅ | 106 | 0.9231 |
-| IForest | ✅ | 103 | 0.4300 |
+| BallTree | ✅ | 132 | 5.3949 |
+| GMM | ✅ | 98 | 0.9231 |
+| IForest | ✅ | 110 | 0.4645 |
 | PhysicalSentinel | ✅ | 143 | 19.7243 |
 | VelocityBypass | — | 0 | 0.1876 |
 
@@ -303,7 +258,7 @@
 - **Exfiltration**
   - T1048 – Oversized Packet Exfiltration
 
-### Incident #36
+### Incident #34
 
 | Field | Value |
 |-------|-------|
@@ -322,9 +277,9 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 577 | 61.7518 |
-| GMM | ✅ | 500 | 0.9232 |
-| IForest | ✅ | 509 | 0.6667 |
+| BallTree | ✅ | 576 | 61.5207 |
+| GMM | ✅ | 482 | 0.9216 |
+| IForest | ✅ | 502 | 0.6558 |
 | PhysicalSentinel | ✅ | 625 | 212.3383 |
 | VelocityBypass | ✅ | 2 | 0.1958 |
 
@@ -355,7 +310,7 @@
 - **Exfiltration**
   - T1048 – Oversized Packet Exfiltration
 
-### Incident #38
+### Incident #36
 
 | Field | Value |
 |-------|-------|
@@ -374,9 +329,9 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 20 | 0.8463 |
-| GMM | ✅ | 6 | 0.7407 |
-| IForest | ✅ | 5 | 0.2217 |
+| BallTree | ✅ | 20 | 0.8449 |
+| GMM | ✅ | 3 | 0.7407 |
+| IForest | ✅ | 4 | 0.2270 |
 | PhysicalSentinel | ✅ | 27 | 2.8396 |
 | VelocityBypass | — | 0 | 0.1034 |
 
@@ -402,7 +357,7 @@
 - **Exfiltration**
   - T1048 – Oversized Packet Exfiltration
 
-### Incident #39
+### Incident #37
 
 | Field | Value |
 |-------|-------|
@@ -421,9 +376,9 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 270 | 12.3585 |
-| GMM | ✅ | 253 | 0.9783 |
-| IForest | ✅ | 259 | 0.6478 |
+| BallTree | ✅ | 270 | 12.3978 |
+| GMM | ✅ | 251 | 0.9783 |
+| IForest | ✅ | 256 | 0.6581 |
 | PhysicalSentinel | ✅ | 276 | 44.6567 |
 | VelocityBypass | ✅ | 1 | 0.2152 |
 
@@ -451,7 +406,7 @@
   - T1498 – Resource Exhaustion: Bandwidth Volatility
   - T1499.002 – DoS: Endpoint Service (RST Flood)
 
-### Incident #41
+### Incident #39
 
 | Field | Value |
 |-------|-------|
@@ -470,9 +425,9 @@
 
 | Tier | Fired | Fire Count | Mean Score |
 |------|-------|-----------|------------|
-| BallTree | ✅ | 156 | 16.9106 |
-| GMM | ✅ | 137 | 0.9512 |
-| IForest | ✅ | 142 | 0.5834 |
+| BallTree | ✅ | 156 | 16.9224 |
+| GMM | ✅ | 132 | 0.9512 |
+| IForest | ✅ | 142 | 0.6116 |
 | PhysicalSentinel | ✅ | 164 | 61.9099 |
 | VelocityBypass | — | 0 | 0.2043 |
 

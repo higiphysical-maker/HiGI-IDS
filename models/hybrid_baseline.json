@@ -1,10 +1,10 @@
 {
-  "training_date": "2026-04-28T09:50:37.880655",
-  "source_pcap": "data/raw/Hybrid_Baseline.pcap",
+  "training_date": "2026-04-30T13:54:30.624852",
+  "source_pcap": "data/raw/CIC-IDS2017/Hybrid_Baseline.pcap",
   "pcap_packets": 259997,
   "aggregated_windows": 6237,
   "feature_count": 36,
-  "training_duration_sec": 110.12520718574524,
+  "training_duration_sec": 174.12409448623657,
   "config": {
     "n_components": 5,
     "pca_variance": 0.99,
@@ -48,7 +48,7 @@
     "balltree_slack": 1.2,
     "hysteresis_entry_multiplier": 1.0,
     "hysteresis_exit_multiplier": 0.75,
-    "alert_minimum_persistence": 2,
+    "alert_minimum_persistence": 3,
     "tier1_soft_threshold_percentile": 98.0,
     "family_consensus_enabled": true,
     "family_consensus_min_hits": 2
@@ -56,13 +56,13 @@
   "training_stats": {
     "hilbert_dimensions": 23,
     "variance_retained": 0.9999999999999998,
-    "balltree_training_p99_distance": 3.7189413358313956,
-    "gmm_components": 14
+    "balltree_training_p99_distance": 3.7188489301013945,
+    "gmm_components": 12
   },
   "per_feature_ll_thresholds": {
-    "tcp_ratio": 5.598628521837069,
+    "igmp_ratio": 5.987512741890056,
     "udp_ratio": 5.599683506916067,
-    "igmp_ratio": 5.987511857673773,
+    "tcp_ratio": 5.604711694928868,
     "icmp_ratio": 5.982591927834371,
     "flag_syn_ratio": 5.253867323019804,
     "flag_ack_ratio": 4.88537976604558,

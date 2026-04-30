@@ -28,7 +28,7 @@ import sys
 import time
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 from datetime import datetime
 import traceback
 import os
@@ -50,6 +50,7 @@ from src.models.higi_engine import (
     HiGIInferenceError,
 )
 from src.config import HiGISettings
+from src.utils.thread_management import limit_blas_threads
 
 
 # ============================================================================
@@ -506,7 +507,11 @@ class TrainingPipeline:
                 )
 
             engine = HiGIEngine(self.higi_config, n_jobs=self.cores)
-            engine.train(df_aggregated)
+            
+            # !! THREAD CONTROL: Enforce 1 BLAS thread per joblib worker
+            # Without this, nested parallelism (joblib×BLAS) causes virtual memory bloat
+            with limit_blas_threads(n_threads=1):
+                engine.train(df_aggregated)
 
             t_train = time.time() - t0
             logger.info(f"[✓] HiGI training complete in {t_train:.2f}s")
@@ -888,9 +893,12 @@ class DetectionPipeline:
             logger.info("-" * 90)
             t0 = time.time()
 
-            results = bundle.engine.analyze(
-                df_aligned, n_jobs=self.settings.ingestion.n_jobs
-            )
+            # !! THREAD CONTROL: Inference also benefits from thread limiting
+            # .analyze() calls .predict() on BallTree, GMM, IForest which use BLAS
+            with limit_blas_threads(n_threads=1):
+                results = bundle.engine.analyze(
+                    df_aligned, n_jobs=self.settings.ingestion.n_jobs
+                )
 
             # Re-attach metadata to results for forensic linkage (v2.2.0)
             # Index alignment guaranteed: both have 0-based RangeIndex from STEP 5

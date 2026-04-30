@@ -13,12 +13,13 @@
 
 - [Philosophy](#philosophy)
 - [Core Detection Architecture](#core-detection-architecture)
-- [Performance at a Glance](#-the-performance-frontier-higi-vs-sota)
+- [Performance at a Glance](#performance-at-a-glance)
 - [Benchmark Results](#benchmark-results)
 - [Technical Stack](#technical-stack)
 - [Project Structure](#project-structure)
 - [Documentation & Manuals](#documentation--manuals)
 - [Quickstart](#quickstart)
+- [Pipeline Execution Showcase](#pipeline-execution-showcase)
 - [Forensic Engine & XAI](#forensic-engine--xai)
 - [Configuration Reference](#configuration-reference)
 - [Development Standards](#development-standards)
@@ -158,7 +159,7 @@ HiGI is evaluated on the [**CIC‑IDS2017**](https://www.unb.ca/cic/datasets/ids
 | Metric | Value | Notes |
 |---|---|---|
 | **Precision** | **1.000**  | 0 reportable incidents on 8 h of Monday benign traffic |
-| **Recall (DoS)** | **0.875-1.000** | 7 of 8 observable attack classes detected; 1 ambiguous due to sensor data drop |
+| **Recall** | **0.875-1.000** | 7 of 8 observable attack classes detected; 1 ambiguous due to sensor data drop |
 | **F1-Score** | **0.933 (conservative)**  | If the ambiguous case is counted as FN |
 | **False Positive Rate** | **0.000** at incident level | 266 sub‑threshold transients correctly suppressed |
 | **Detection Latency** | **≤ 1 min**  | Including slow‑rate attacks (Slowloris, Slowhttptest) |
@@ -216,7 +217,7 @@ HiGI has been validated against the **CIC-IDS2017 benchmark dataset** (Wednesday
 Python          3.11+
 scikit-learn    ≥ 1.4      # BallTree, GMM, IsolationForest, PowerTransformer (Yeo-Johnson)
 polars          ≥ 0.20     # Lazy, memory-efficient PCAP-to-feature pipeline
-pyshark / scapy            # PCAP ingestion and packet-level parsing
+dpkt                       # PCAP ingestion and packet-level parsing
 PyYAML          ≥ 6.0      # Configuration loading (config.yaml → HiGISettings dataclass)
 numpy           ≥ 1.26
 pandas          ≥ 2.0      # Supplementary tabular operations
@@ -253,6 +254,7 @@ HiGI/
 └── src/
     ├── config.py                       # HiGISettings dataclass + YAML validation
     ├── orchestrator.py                 # Top‑level pipeline orchestrator
+    ├── utils/                          # Preflight, BLAS threads & joblib configuration
     ├── ingestion/
     │   └── processor_optime.py         # Polars lazy PCAP‑to‑feature pipeline
     ├── models/
@@ -270,8 +272,9 @@ HiGI provides comprehensive documentation for different SOC roles. Available in 
 | Role / Manual | Description | Language | Link |
 |---|---|---|---|
 | **Forensic Analyst Guide** | XAI attribution, MITRE mapping & incident triage | 🇺🇸 ENG · 🇪🇸 ESP | [`docs/`](./docs) |
-| **Data Engineering Ref.** | Polars pipeline, feature physics & ingestion | 	🇺🇸 ENG · 🇪🇸 ESP| [`docs/`](./docs) |
-| **Engine Architecture** | Hilbert Projector, GMM & Tribunal logic | 🇺🇸 ENG · 🇪🇸 ESP| [`docs/`](./docs) |
+| **Data Engineering Ref.** | Polars pipeline, feature physics & ingestion | 🇺🇸 ENG · 🇪🇸 ESP | [`docs/`](./docs) |
+| **Engine Architecture** | Hilbert Projector, GMM & Tribunal logic | 🇺🇸 ENG · 🇪🇸 ESP | [`docs/`](./docs) |
+| **Orchestrator & Execution** | Training, detection, reporting lifecycle; CLI reference; ArtifactBundle & configuration contracts | 🇺🇸 ENG · 🇪🇸 ESP | [`docs/`](./docs) |
 
 
 ---
@@ -318,12 +321,21 @@ Generates a Markdown report and a PDF report with incident timeline, MITRE ATT&C
 ### 4. Full Pipeline (Train → Detect → Report)
 
 ```bash
-python main.py pipeline \
-  --baseline data/raw/Monday_Victim_50.pcap \
-  --target data/raw/Wednesday_Victim_50.pcap \
-  --model models/baseline_monday \
-  --report-dir reports/forensic_wednesday/
+python main.py run \
+        --source data/raw/Wednesday.pcap \
+        --bundle models/baseline_monday.pkl \
+        --output data/processed/ \
 ```
+
+---
+
+##  Pipeline Execution Showcase
+
+For a pre-rendered, step-by-step walkthrough of the **HiGI Engine** in action, refer to the [Demo Notebook](DEMO_NOTEBOOK.ipynb). 
+
+This showcase captures a real-world execution of the full pipeline—from model training to forensic anomaly reporting—allowing you to audit the physical logic and internal logs without the need for a local environment setup or large PCAP datasets.
+
+> Note: The execution shown is optimized for traffic originating from the .50 host at [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html) as defined in the project's baseline.
 
 ---
 
@@ -357,7 +369,7 @@ Each incident is automatically mapped to the closest MITRE ATT&CK technique base
 | Forensic Report | Markdown | Full narrative autopsy with XAI attribution |
 | Forensic Report | PDF | Print-ready version for SOC documentation |
 
-Reports are filtered by sigma_culprit_min: 2 (configurable).
+Reports are filtered by `sigma_culprit_min: 2` (configurable).
 <p align="center">
   <img src="reports/forensic_wednesday/Wednesday_Victim_50_results_radar.png" height="300" alt="Physical Radar">
   <img src="reports/forensic_wednesday/Wednesday_Victim_50_results_timeline.png" height="300" alt="Incident Timeline"> 
@@ -394,15 +406,10 @@ The complete parameter surface is documented inline in `config.yaml`. Key sectio
 HiGI is developed to professional open-source standards suitable for research publication, SOC integration, and community contribution.
 
 - Style: PEP 8 enforced throughout all source modules
-
 - Type Safety: Full static type hinting on all public interfaces
-
 - Documentation: Google‑style docstrings on all public classes and methods
-
 - Configuration: Zero magic numbers — all parameters in config.yaml, validated at startup
-
 - Language: English‑only source code, comments, docstrings, and commit messages
-
 - Modularity: Ingestion, model, analysis, and orchestration layers are independently testable and replaceable
 
 ---
@@ -460,5 +467,5 @@ MIT License — see [`LICENSE`](./LICENSE) for full terms.
 
 ---
 
-*HiGI IDS — Created and Developed by Pablo Aguadero. 2026.*
+*HiGI IDS — Created and Developed by Pablo Aguadero. 2026 with AI-augmented engineering (free version) for logic validation and architectural optimization.*
 *Validated against CIC-IDS2017. Reference: Engelen, G., Rimmer, V., & Joosen, W. (2021). Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case Study. IEEE EuroS&PW. doi:10.1109/EuroSPW54576.2021.00015*
