@@ -1,6 +1,6 @@
 # HiGI IDS — Manual de Inteligencia Forense y Atribución (XAI)
 
-**Versión:** 2.0.0 · **Motor:** `forensic_engine.py` · **Ecosistema:** HiGI IDS v4.0  
+**Versión:** 2.0.0 · **Motor:** [`forensic_engine.py`](/src/analysis/forensic_engine.py) · **Ecosistema:** HiGI IDS v4.0  
 **Clasificación:** Documentación Técnica Interna — Equipo SOC / Blue Team  
 **Formato de referencias:** IEEE / MITRE ATT&CK v14
 
@@ -575,6 +575,6 @@ Este flujo de análisis de cuatro pasos permite a un analista de SOC llegar desd
 
 ---
 
-*Este manual describe la arquitectura de atribución del [forensic_engine.py](../src/analysis/forensic_engine.py) (HiGI IDS v4.0, ForensicEngine V2.0) y su [documentación técnica](reference/forensic_documentation.md). Para la documentación de los tiers de detección (BallTree, GMM, IForest, PhysicalSentinel, VelocityBypass), consultar [Higi_manual.md](Higi_manual.md). Para la configuración de umbrales, consultar [config.yaml](../config.yaml).*
+*Este manual describe la arquitectura de atribución del [forensic_engine.py](/src/analysis/forensic_engine.py) (HiGI IDS v4.0, ForensicEngine V2.0). Para la documentación de los tiers de detección (BallTree, GMM, IForest, PhysicalSentinel, VelocityBypass), consultar [Higi_manual.md](/docs/esp/Higi_manual.md). Para la configuración de umbrales, consultar [config.yaml](/config.yaml).*
 
 *— HiGI Security Data Engineering Team*

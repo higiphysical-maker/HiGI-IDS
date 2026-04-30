@@ -43,7 +43,7 @@ hilbert:
   blocked_pca_enabled: true           # Enable per-family Blocked PCA
   blocked_pca_variance_per_family:    # Per-family variance retention targets
     volume: 0.95                       # High-variance features (bytes, pps, velocity)
-    payload: 0.95                      # Raw byte counts with extreme scales
+    payload: 0.99                      # Raw byte counts with extreme scales
     flags: 0.99                        # Low-variance ratios [0,1] — retain more variance
     protocol: 0.99                     # Low-variance ratios — retain more variance
     connection: 0.95                   # Kinematics and port features
@@ -90,7 +90,7 @@ sentinel:
   per_feature_thresholds: true        # Per-feature LL threshold (P99.9 per feature)
   global_threshold: 1.0e-6            # Fallback if per-feature disabled
   directionality_analysis: true       # Track SPIKE/DROP direction in forensic output
-  portero_sigma_threshold: 20.0       # Extreme sigma → forced CRITICAL (Portero veto)
+  portero_sigma_threshold: 12.0       # Extreme sigma → forced CRITICAL (Portero veto)
 
 # ---------------------------------------------------------------------------
 # Velocity Bypass Detector (Tier 4 — rolling Z-score gate)
@@ -114,9 +114,9 @@ tribunal:
   # Actual weights = base_weight × (1 - velocity.tribunal_weight).
   # Final weights are normalised to sum 1.0 in HiGIConfig.__post_init__().
   weights:
-    balltree: 0.25
+    balltree: 0.2
     gmm: 0.40
-    iforest: 0.35
+    iforest: 0.4
   consensus_threshold: 0.5            # Minimum weighted score to confirm anomaly
   majority_vote_threshold: 2          # Votes needed in legacy (non-weighted) mode
 
@@ -138,18 +138,18 @@ persistence:
   hysteresis_entry_multiplier: 1.0    # Entry threshold = p95 × multiplier
   hysteresis_exit_multiplier: 0.75    # Exit threshold = p95 × multiplier
   alert_minimum_persistence: 3        # Base consecutive windows to confirm alert
-  persistence_filter_window: 3        # Rolling-min window for anti-FP filter
+  persistence_filter_window: 3       # Rolling-min window for anti-FP filter
 
 # ---------------------------------------------------------------------------
 # Forensic Engine
 # ---------------------------------------------------------------------------
 forensic:
-  debounce_seconds: 30                # Incident clustering debounce
+  debounce_seconds: 30               # Incident clustering debounce
   data_drop_threshold_seconds: 60     # Gap size that counts as a "Data Drop"
-  sigma_culprit_min: 2.0              # Min mean |sigma| to include incident in report
-  default_confidence_filter: 0.8     # Default min confidence for reportable incidents
-  default_min_anomalies: 3            # Default min anomalies per incident
-  default_min_duration_seconds: 1.0   # Default min incident duration
+  sigma_culprit_min: 2           # Min mean |sigma| to include incident in report
+  default_confidence_filter: 0.8   # Default min confidence for reportable incidents
+  default_min_anomalies: 1       # Default min anomalies per incident
+  default_min_duration_seconds: 1    # Default min incident duration
   top_features_per_pc: 3              # Features per PC in forensic attribution
   tier_confidence_weights:      # Pesos para Consensus Confidence Index
     balltree: 0.20

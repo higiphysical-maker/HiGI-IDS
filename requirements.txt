@@ -1,0 +1,22 @@
+# --- HiGI IDS Core Dependencies ---
+polars>=0.20.0
+numpy>=1.26.4
+pandas>=2.0.0
+pyarrow>=14.0.0
+scikit-learn>=1.4.0
+scipy>=1.12.0
+PyYAML>=6.0.1
+
+# --- Network Ingestion ---
+scapy>=2.7.0
+# Note: pyshark requires tshark installed on the OS
+
+# --- Analysis & Forensic Engine ---
+matplotlib>=3.8.0
+seaborn>=0.13.0
+reportlab>=3.6.12
+statsmodels>=0.14.0
+tqdm>=4.66.0
+
+# --- Typing & Standards ---
+typing-extensions>=4.9.0

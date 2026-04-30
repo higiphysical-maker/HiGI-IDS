@@ -1,0 +1,15 @@
+{
+  "detection_date": "2026-04-29T08:37:04.253419",
+  "test_pcap": "data/raw/Monday_Victim_50.pcap",
+  "baseline_bundle": "models/hybrid_baseline.pkl",
+  "total_samples": 4077,
+  "anomalies_detected": 148,
+  "critical_count": 15,
+  "soft_zone_count": 142,
+  "anomaly_rate_pct": 3.630120186411577,
+  "inference_duration_sec": 6.775994300842285,
+  "throughput_samples_per_sec": 3664.4373278428775,
+  "phase_6_enabled": true,
+  "soft_threshold_defended": 142,
+  "directionality_analysis": "SPIKE/DROP in physical_culprit"
+}

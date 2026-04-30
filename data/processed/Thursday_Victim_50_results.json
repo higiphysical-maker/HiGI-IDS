@@ -1,15 +1,15 @@
 {
-  "detection_date": "2026-04-27T10:17:38.969753",
+  "detection_date": "2026-04-28T09:55:16.664132",
   "test_pcap": "data/raw/Thursday_Victim_50.pcap",
   "baseline_bundle": "models/hybrid_baseline.pkl",
   "total_samples": 6542,
-  "anomalies_detected": 3851,
-  "critical_count": 36,
-  "soft_zone_count": 744,
-  "anomaly_rate_pct": 58.86579027820239,
-  "inference_duration_sec": 9.807681322097778,
-  "throughput_samples_per_sec": 3590.866136308018,
+  "anomalies_detected": 3565,
+  "critical_count": 51,
+  "soft_zone_count": 609,
+  "anomaly_rate_pct": 54.49403852033018,
+  "inference_duration_sec": 7.352699041366577,
+  "throughput_samples_per_sec": 3559.7015060060826,
   "phase_6_enabled": true,
-  "soft_threshold_defended": 744,
+  "soft_threshold_defended": 609,
   "directionality_analysis": "SPIKE/DROP in physical_culprit"
 }

@@ -1,130 +1,464 @@
-# HiGI IDS v4.0: Hilbert-space Gaussian Intelligence
-> **A Physics-Inspired Intrusion Detection System based on Manifold Learning & Kinetic Regime Analysis.**
+# HiGI IDS — Hilbert-space Gaussian Intelligence
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)]()
-[![License](https://img.shields.io/badge/license-Open%20Source-green.svg)]()
-[![Framework](https://img.shields.io/badge/Framework-Hilbert--Space--Projection-blueviolet.svg)]()
-[![Standards](https://img.shields.io/badge/Standards-Clean--Code%20%7C%20PEP8-brightgreen.svg)]()
+> **Physics-based Network Observability:** An unsupervised Intrusion Detection System that treats network traffic as a measurable physical system — detecting threats as statistical deviations from a learned baseline, not as matched signatures.
 
-## 🌌 ABSTRACT: Hilbert-space Gaussian Intelligence
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![PEP8](https://img.shields.io/badge/code%20style-PEP8-green.svg)](https://peps.python.org/pep-0008/)
+[![CIC-IDS2017 Validated](https://img.shields.io/badge/benchmark-CIC--IDS2017-orange.svg)](./reports/benchmarks/)
 
-### Contexto y Fundamentos de Lógica Física
-**HiGI IDS v4.0** propone un cambio de paradigma en la detección de intrusiones en red (NIDS), abandonando el análisis heurístico por un enfoque de **Lógica Física**. El sistema postula que el tráfico de red puede ser modelado como un sistema físico continuo caracterizado por variables de estado como **presión (PPS)**, **volumen (bytes)** y **composición (flags/protocolos)**. Bajo esta premisa, el tráfico legítimo no se define mediante reglas, sino como un **campo de equilibrio estadístico** donde las intrusiones actúan como fuerzas externas que inducen perturbaciones cinemáticas en el estado de reposo del sistema.
+---
 
-### Marco de Referencia Inercial
-Central a esta arquitectura es el concepto de **Marco de Referencia Inercial** ($\mathcal{N}(\boldsymbol{\mu}_0, \boldsymbol{\Sigma}_0)$), construido empíricamente a partir de un baseline de tráfico benigno estacionario (e.g., Lunes). Durante la fase de entrenamiento, el motor calibra los parámetros estadísticos que definen el reposo y los congela para evitar el **reference poisoning** por ataques persistentes. Toda muestra de inferencia se evalúa exclusivamente como una desviación respecto a este marco inercial, permitiendo que la detección sea **invariante ante la escala** y dependiente únicamente de la **distancia de Mahalanobis** en el espacio original.
+## Table of Contents
 
-### Proyección al Espacio de Hilbert ($\mathcal{H}$)
-Para resolver la alta dimensionalidad y la naturaleza no lineal del tráfico (distribuciones log-normales y bimodales), HiGI implementa una proyección a una variedad de datos reducida denominada **Espacio de Hilbert**. El pipeline de preprocesamiento aplica una transformación de **Yeo-Johnson** seguida de un **Análisis de Componentes Principales (PCA) con blanqueamiento (whitening)**. Este proceso garantiza que la varianza sea unitaria en todas las dimensiones proyectadas, logrando que la distancia euclidiana en $\mathcal{H}$ sea un estimador fiel de la disimilitud semántica y equivalga matemáticamente a la distancia de Mahalanobis.
+- [Philosophy](#philosophy)
+- [Core Detection Architecture](#core-detection-architecture)
+- [Performance at a Glance](#-the-performance-frontier-higi-vs-sota)
+- [Benchmark Results](#benchmark-results)
+- [Technical Stack](#technical-stack)
+- [Project Structure](#project-structure)
+- [Documentation & Manuals](#documentation--manuals)
+- [Quickstart](#quickstart)
+- [Forensic Engine & XAI](#forensic-engine--xai)
+- [Configuration Reference](#configuration-reference)
+- [Development Standards](#development-standards)
+- [Known Research Gaps & Limitations](#known-research-gaps--limitations)
+- [License](#license)
 
-``` mermaid
-mindmap
-  root((HiGI IDS v4.0))
-    ::icon(fa fa-microchip)
-    (Fundamentos Conceptuales)
-      {{Logica Fisica}}
-        Trafico como campo continuo
-        Estado de reposo empirico
-      {{Marco de Referencia Inercial}}
-        Baseline del Lunes congelado
-        Invarianza de escala Mahalanobis
-      {{Espacio de Hilbert}}
-        Variedad de datos proyectada
-        Geometria de estados
-    (Pipeline de Procesamiento)
-      {{Ingestion}}
-        PcapProcessor optime v2.3.0
-        Ventanas temporales de 1s
-      {{Preprocesamiento}}
-        Yeo-Johnson Gaussianizacion
-        Standardization Media Cero
-      {{Proyeccion de Hilbert}}
-        Blocked-PCA Preservacion Semantica
-        Whiten True Invarianza Distancia
-    (Arquitectura Multi-Tier Sentinel)
-      {{Tier 1 Portero Geometrico}}
-        BallTree k-NN en Hilbert
-        Filtrado inicial P99
-      {{Tier 2 Tribunal Probabilistico}}
-        GMM Bayesiano Densidad local
-        Isolation Forest Estructura
-      {{Tier 3 Centinela Fisico}}
-        GMM Univariante por feature
-        Veto del Portero 20 sigma
-      {{Tier 4 Valvula de Emergencia}}
-        Velocity Bypass Rolling Z-score
-        Deteccion de Transicion de Regimen
-    (Inteligencia Forense XAI)
-      {{Atribucion Causal}}
-        Culprit Feature Desviacion Maxima
-        Polaridad SPIKE y DROP
-      {{Familias Fisicas}}
-        Volume Flags Payload
-        Connection Kinematics Protocol
-      {{Gestion de Alertas}}
-        Debounce 30s RFC 6298
-        Dynamic Severity Score DSS
-      {{Mapeo MITRE ATT&CK}}
-        Inferencia de Tacticas
-        Robustez ante cifrado TLS
+---
+
+## Philosophy
+
+Traditional Intrusion Detection Systems operate on a **signature catalog**: a curated list of known-bad patterns. This model is fundamentally reactive — it can only identify what it has already seen. Against novel vectors, slow-rate attacks, or protocol abusers that stay within byte-volume thresholds, signature-based systems are blind.
+
+HiGI takes a different approach. Instead of asking "does this traffic match a known attack?", it asks: "Is this traffic statistically consistent with the normal physiology of this network?"
+
+Network flows are treated as multi-dimensional physical observables — velocity, payload continuity, connection kinematics, protocol ratios — and projected into a reduced metric space where anomaly detection becomes a geometric and probabilistic problem. Anomalies are measured in standard deviations (σ) from a learned baseline: a unit that is physically interpretable and threshold-agnostic across different network environments.
+
+### The Tribunal of Consensus
+
+No single detector is infallible. HiGI's detection pipeline is organized as a **four-tier Tribunal of Consensus**, where each tier contributes a weighted vote. An anomaly is confirmed only when the weighted consensus score exceeds a configurable threshold (`tribunal.consensus_threshold`). This architecture prevents single-point failures, reduces false positive rates from transient spikes, and provides a structured audit trail for each detection decision.
+
+The five **Physics Feature Families** that HiGI monitors, derived directly from the feature engineering pipeline:
+
+| Family | Physical Analogy | Example Features |
+|---|---|---|
+| **Volume** | Fluid flow rate | `bytes`, `pps`, `bytes_per_second` |
+| **Payload** | Signal content density | `payload_continuity_ratio`, `payload_bytes` |
+| **Flags** | Protocol state signals | `flag_syn_ratio`, `flag_rst_ratio`, `icmp_ratio` |
+| **Protocol** | Transport-layer vital signs | `tcp_ratio`, `udp_ratio`, `protocol_entropy` |
+| **Connection** | Network kinematics | `unique_dst_ports`, `iat_mean`, `iat_std` |
+
+Anomalies are expressed in standard deviations (σ) from the baseline — a unit that is **physically interpretable** and threshold-agnostic across different network environments.
+
+---
+
+## Core Detection Architecture
+
+```mermaid
+graph TD
+    %% Professional Style Definitions
+    classDef conditioning fill:#1a5276,stroke:#154360,color:#fff,stroke-width:2px;
+    classDef tribunal fill:#d35400,stroke:#873a03,color:#fff,stroke-width:2px;
+    classDef action fill:#145a32,stroke:#0b301b,color:#fff,stroke-width:2px;
+    classDef veto fill:#943126,stroke:#641e16,color:#fff,stroke-width:3px,stroke-dasharray: 5 5;
+    classDef input fill:#2e4053,stroke:#1b2631,color:#fff;
+
+    %% Ingestion Layer
+    START((fa:fa-network-wired Ingestion)) --> PROC[processor_optime.py v2.3.0]
+    PROC --> |Polars 1s Windows| FEAT[Physical Feature Extraction]
+    FEAT --> VEL_Z[Velocity Z-Score Calculation: <br/>vel_pps_z, vel_bytes_z, vel_syn_z]
+
+    subgraph Data_Conditioning [fa:fa-gears Data Conditioning]
+        direction TB
+        YJ[Yeo-Johnson Power Transform <br/>Gaussianization & P99 Clipping]
+        BPCA[Blocked PCA by Physical Families <br/>Volume, Payload, Flags, Protocol, Conn]
+        HILBERT[fa:fa-vector-square Hilbert Space Projection <br/>H ≈ 17-25 Dimensions, Whiten=True]
+        
+        YJ --> BPCA --> HILBERT
+    end
+
+    VEL_Z --> Data_Conditioning
+
+    subgraph Tribunal_of_Consensus [fa:fa-balance-scale Tribunal of Consensus]
+        direction TB
+        T1[Tier 1: Geometric Gatekeeper <br/>BallTree k-NN Distances <br/>Norm. P99.9]:::tribunal
+        T4[Tier 4: Velocity Bypass <br/>Self-Normalizing Z-Scores <br/>Emergency Gate]:::tribunal
+        
+        T1 --> |Suspicious Mask| T2[Tier 2: Probabilistic Tribunal <br/>GMM Bayesian reg_covar=0.1 <br/>+ IForest Structural Isolation]:::tribunal
+        T2 --> T3[Tier 3: Physical Sentinel <br/>Univariate GMM per feature <br/>Directional SPIKE/DROP]:::tribunal
+    end
+
+    HILBERT --> T1
+    VEL_Z --> T4
+
+    %% Veto & Decision Logic
+    VETO{fa:fa-hand-paper PORTERO VETO <br/> >20σ Deviation?}:::veto
+    CONSENSUS{fa:fa-calculator Consensus <br/> Σ w_i * s_i ≥ 0.5}
+
+    T3 --> CONSENSUS
+    FEAT --> VETO
+    
+    %% Tribunal Weighting
+    T1 -.-> |w=0.2125| CONSENSUS
+    T2 -.-> |w=0.6375| CONSENSUS
+    T4 -.-> |w=0.1500| CONSENSUS
+
+    %% Action & Forensics Layer
+    subgraph Action_Forensics [fa:fa-shield-halved Action & Forensics]
+        STAB[Temporal Stabilization <br/>Hysteresis FIX-3 & Persistence 3w]
+        FORENSIC[ForensicEngine <br/>Attribution & Culprit Mapping <br/>MITRE ATT&CK Mapping]:::action
+        REPORT[fa:fa-file-pdf PDF Report Generation <br/>SLA Dashboards]:::action
+    end
+
+    VETO --> |YES: CRITICAL BYPASS| STAB
+    CONSENSUS --> |is_anomaly=1| STAB
+    T4 --> |Override| STAB
+    
+    STAB --> FORENSIC --> REPORT
+
+    %% Class Assignment
+    class START,PROC,FEAT,VEL_Z input;
+    class YJ,BPCA,HILBERT conditioning;
+    class STAB,FORENSIC,REPORT action;
 ```
----
+HiGI's detection pipeline consists of four tiers, each addressing a distinct region of the anomaly space.
 
-## 🏗️ Arquitectura de Detección en Cascada (Multi-Tier Sentinel)
+**Data Conditioning:** Network physics data is inherently non-Gaussian and heavy-tailed. HiGI applies a Yeo-Johnson Power Transform to stabilize variance and minimize skewness across all feature families before Hilbert projection. This ensures that the σ-deviations computed by the Physical Sentinel are statistically valid and comparable.
 
-HiGI v4.0 opera mediante una estructura de detección de cuatro niveles independientes y coordinados, optimizados para el rigor estadístico y la eficiencia computacional.
+### Tier 1 — BallTree Nearest-Neighbor Detector
 
-| Nombre del Tier | Base Matemática | Función Crítica | Hito Técnico (Breakthrough) |
-| :--- | :--- | :--- | :--- |
-| **Tier 1: Portero Geométrico** | BallTree (k-NN) en Espacio de Hilbert | Filtrado inicial de muestras basado en la proximidad geométrica. | **FIX-1 (Batch-Independence):** Normalización de scores contra el percentil P99 de entrenamiento para invarianza de escala. |
-| **Tier 2: Tribunal Probabilístico** | Bayesian GMM + Isolation Forest | Estimación de la densidad de probabilidad local y aislamiento estructural. | **Selección Adaptativa de K:** Voto ponderado (BIC/AIC/Sil/DB) para evitar sobreajuste a artefactos de red. |
-| **Tier 3: Centinela Físico** | GMM Univariante por característica | Verificación de plausibilidad física en cada dimensión marginal independiente. | **Portero Veto:** Capacidad de forzar alerta crítica incondicional si una métrica supera $\sigma \geq 20.0$. |
-| **Tier 4: Válvula de Emergencia** | Rolling Z-score (PPS, Bytes, SYN) | Detección de transiciones abruptas de régimen dinámico "geométricamente invisibles". | **Velocity Bypass:** Operación apátrida (*stateless*) fuera de Hilbert que protege la alerta contra filtros de supresión. |
+Models the baseline as a BallTree in the reduced space. Windows with k‑NN distance (k=5) beyond the P99.9 percentile of the baseline distribution are flagged. Excels at detecting population‑level deviations.
 
-### Notas Técnicas de Implementación
-* **Mecanismo de Cortocircuito:** El sistema optimiza el cómputo enviando al Tier 2 solo las muestras fuera de la zona de confort (P90) del Tier 1, excepto en el **Tier 4**, que evalúa el 100% de la telemetría en paralelo.
-* **Consenso del Tribunal:** La decisión final integra las señales mediante una suma ponderada donde el **GMM (0.280)** y el **Velocity Bypass (0.300)** poseen la mayor influencia.
-* **Protección de Persistencia:** Las alertas de Tier 4 se re-aplican tras los filtros de suavizado temporal (*rolling-min*), impidiendo que ataques DoS explosivos sean silenciados.
+### Tier 2A — Bayesian Gaussian Mixture Model (GMM) Detector
 
----
+Scores windows by log‑likelihood under a Bayesian Gaussian Mixture Model learned on the baseline. Captures distributional shifts invisible to distance‑based methods.
 
-## 🕵️ Forensic Intelligence & Explainable AI (XAI)
+### Tier 2B — Isolation Forest Detector
 
-El motor **ForensicEngine V2** descompone desviaciones matemáticas complejas en métricas físicas comprensibles para el analista del SOC.
+Ensemble of 100 trees that isolates anomalies through random partitioning. Robust against high‑dimensional outliers.
 
-### 1. Lógica del Culpable Primario (Culprit Feature)
-Identifica la característica $j^*$ que presenta la mayor desviación absoluta ($|\sigma|$) en el instante $t$.
-* **Sparsidad Adversarial:** Postula que un ataque impacta con mayor fuerza en un subconjunto específico de dimensiones físicas.
-* **Ranking y Loading:** Las desviaciones se normalizan en un *Loading Magnitude* (0 a 1). Un loading de 1.0 identifica al feature con la desviación máxima, generando un ranking de los **Top-3 culpables físicos**.
-* **Resolución de Conflictos:** Prioriza al Tier 3 (Physical Sentinel) por su máxima resolución espacial.
+### Tier 3 — Physical Sentinel (Univariate Z-Score Auditor)
 
-### 2. Análisis de Polaridad: SPIKE vs. DROP
-* **SPIKE (Sgn = +1):** Valor significativamente superior al baseline (e.g., SYN Flood o Exfiltración).
-* **DROP (Sgn = -1):** Valor inferior a la media del baseline (e.g., inundación masiva bajando el *iat_mean*).
-* **Detección de Aleatoriedad:** Ataques de Fuerza Bruta producen SPIKES extremos (decenas de miles de sigmas) en `payload_continuity_ratio`.
+Per‑feature univariate GMM scoring on the original physical families. Tracks directionality (SPIKE/DROP) for XAI attribution. A Portero veto mechanism forces CRITICAL severity on any window with a single‑feature deviation exceeding 20σ.
 
-### 3. Agrupación Temporal y Lógica de De-bounce (RFC 6298)
-* **Reducción de Fatiga:** Consolida ventanas anómalas en un único objeto **SecurityIncidentV2** si los gaps son < 30 segundos.
-* **Alineación Estándar:** El parámetro de 30s se alinea con los tiempos máximos de retransmisión TCP del **RFC 6298**.
-* **Persistencia:** Permite distinguir entre *Sustained Attack* y *Transient Spike*.
+
+### Tier 4 — Velocity Bypass Detector (Emergency Gate)
+
+Rolling Z‑score gate on packet rate, byte rate, and SYN ratio (60 s window). Detects flash floods and volumetric spikes that are geometrically close to high‑load benign traffic in the reduced space. This tier was introduced to resolve a documented blind spot: high‑rate homogeneous floods (DoS Hulk, GoldenEye) that collapse intra‑window variance and become invisible to the BallTree.
 
 ---
 
-## 📊 Benchmarks de Validación: CIC-IDS-2017
+## Performance at a Glance
 
-### 1. Hallazgos Principales por Jornada
-* **Wednesday (DoS/DDoS):** Recall del **100%**. Detectó **Slowloris** ($45.84\sigma$) y **GoldenEye** ($4120\sigma$). Identificó fases de reconocimiento 21 minutos antes de la etiqueta oficial.
-* **Thursday (Web/Infiltración):** Detección exitosa de Brute Force ($38,836\sigma$), XSS y **Nmap** (identificado por flags URG con desviación astronómica de **$216,195\sigma$**).
+HiGI is evaluated on the [**CIC‑IDS2017**](https://www.unb.ca/cic/datasets/ids-2017.html) dataset across three days: Monday (benign control), Wednesday (DoS/DDoS), and Thursday (Web Attacks / Infiltration). The model is trained once on Monday benign traffic and deployed without retraining on the subsequent days.
 
-### 2. La Paradoja de Hulk: Tier 1 vs. Tier 4
-Ataques como **DoS Hulk** son "geométricamente invisibles" para el Espacio de Hilbert debido a su baja varianza intra-ventana (score de apenas 0.26×P99 en Tier 1).
-* **Solución:** El **Tier 4 (Velocity Bypass)** interceptó a Hulk (Incidente #36) detectando la presión estadística por la multiplicación brutal de PPS, logrando un match con **94.9% de confianza**.
+### Incident‑Level Metrics (Full Multi‑Day Evaluation)
 
-### 3. Eficiencia Operacional (Reducción de Fatiga)
-| Jornada | Ventanas Anómalas | Incidentes Reportables | Ratio de Manejabilidad |
-| :--- | :--- | :--- | :--- |
-| **Wednesday** | 3,599 | 9 | **0.25%** |
-| **Thursday** | 3,954 | 10 | **0.25%** |
+| Metric | Value | Notes |
+|---|---|---|
+| **Precision** | **1.000**  | 0 reportable incidents on 8 h of Monday benign traffic |
+| **Recall (DoS)** | **0.875-1.000** | 7 of 8 observable attack classes detected; 1 ambiguous due to sensor data drop |
+| **F1-Score** | **0.933 (conservative)**  | If the ambiguous case is counted as FN |
+| **False Positive Rate** | **0.000** at incident level | 266 sub‑threshold transients correctly suppressed |
+| **Detection Latency** | **≤ 1 min**  | Including slow‑rate attacks (Slowloris, Slowhttptest) |
+| **Extra‑GT Reconnaissance** | **21 min pre‑attack** | Scanning detected before the first labelled DoS |
+
+>**Important**: Precision and FPR are reported at the incident level (clusters of consecutive anomalous windows), not at the individual window level. The Monday control day produced zero reportable incidents, validating the Tribunal's false‑positive suppression. For a full derivation of all metrics, a detailed comparison with six published SOTA systems, and an honest treatment of limitations, see the [Master Benchmark Report](/reports/benchmarks/HiGI_IDS_Master_Benchmark_SoTA_Report.md).
+
+### Comparative Multi-Objective Analysis
+While supervised SOTA models such as **GCN‑DQN** (Mwiga et al., 2026) or **TRBMA** (Guo & Xie, 2025) achieve high recall on known attack classes, they require labelled attack data for training and do not optimise for generalisation under distribution shift. The radar chart below contextualises HiGI’s performance across six axes — including XAI depth and zero‑shot generalisation — where physics‑based detection offers structural advantages over supervised classifiers.
+
+<p align="center">
+  <img src="reports/benchmarks/figures/higi_sota_radar.png" width="600" alt="HiGI vs SOTA Radar Chart">
+  <br>
+  <i>Figure: Multi-objective comparison across six performance axes.</i>
+</p>
+
+> **Key Insight:** HiGI and supervised SOTA are architecturally optimizing for different requirements. HiGI provides a **"Forensic-First"** detection that remains robust under distribution shifts where black-box models require constant re-calibration.
 
 ---
-*Documentación generada bajo estándares internacionales de Open Source para el proyecto HiGI IDS v4.0.*
+
+## Benchmark Results
+
+HiGI has been validated against the **CIC-IDS2017 benchmark dataset** (Wednesday and Thursday sessions). Full audit reports are available in [`reports/benchmarks/`](./reports/benchmarks/).
+
+**Dataset Source:** Experiments conducted using the [CIC-IDS2017 Dataset](https://www.unb.ca//cic/datasets/ids-2017.html) (University of New Brunswick).  Analysis scoped to victim host **192.168.10.50** (Ubuntu Server).
+
+
+### CIC-IDS2017 Wednesday — DoS/DDoS Campaign (Example)
+
+| Attack Vector | Ground Truth Window | HiGI Detection | Confidence | Dominant Physical Signature |
+|---|---|---|---|---|
+| DoS Slowloris | 09:47 – 10:10 EDT | ✅ MATCH (+1 min) | 100% | `unique_dst_ports` ↑ 45.84σ · Socket Exhaustion |
+| DoS Slowhttptest | 10:14 – 10:35 EDT | ✅ MATCH (+1 min) | 100% | `icmp_ratio` ↑ 102.77σ · Server Saturation |
+| DoS Hulk | 10:43 – 11:00 EDT | ✅ MATCH | 94.9% | `payload_continuity_ratio` ↑ 1,917σ · Volume Flood |
+| DoS GoldenEye | 11:10 – 11:23 EDT | ✅ MATCH | 93.5% | `payload_continuity_ratio` ↑ 4,120σ · Keepalive Collapse |
+
+**Pre-Attack Reconnaissance Detected (Extra-GT):** HiGI flagged anomalous scanning activity at 09:26 EDT — **21 minutes before the first labeled attack** — mapping to MITRE ATT&CK T1046 (Network Service Discovery) and T1595.001 (Active Scanning). This phase is invisible to supervised models trained exclusively on attack labels.
+
+### Summary Performance Metrics (Wednesday)
+
+| Metric | Value |
+|---|---|
+| Recall (TPR) | **100%** — all 4 DoS vectors detected |
+| False Negatives | **0** |
+| Detection Latency | **≤ 1 minute** (including slow-rate attacks) |
+| Reportable False Positives | 0 (5 sub‑threshold transients; 2 confirmed as reconnaissance, 3 suppressed by filters) |
+
+
+
+---
+
+## Technical Stack
+
+```
+Python          3.11+
+scikit-learn    ≥ 1.4      # BallTree, GMM, IsolationForest, PowerTransformer (Yeo-Johnson)
+polars          ≥ 0.20     # Lazy, memory-efficient PCAP-to-feature pipeline
+pyshark / scapy            # PCAP ingestion and packet-level parsing
+PyYAML          ≥ 6.0      # Configuration loading (config.yaml → HiGISettings dataclass)
+numpy           ≥ 1.26
+pandas          ≥ 2.0      # Supplementary tabular operations
+matplotlib      ≥ 3.8      # Forensic timeline and radar chart generation
+reportlab                  # Forensic PDF report generation
+```
+
+All configurable parameters — thresholds, sigma values, PCA variance targets, window sizes — are defined exclusively in `config.yaml`. **The source code contains zero magic numbers.**
+
+---
+
+## Project Structure
+
+```
+HiGI/
+├── config.yaml                         # Unified system configuration (SSoT)
+├── main.py                             # CLI entry point
+├── data/
+│   ├── processed/                      # Detection result CSVs and JSON
+│   └── raw/                            # Input PCAPs (not versioned)
+├── docs/
+│   ├── eng/                            # English manuals
+│   └── esp/                            # Spanish manuals
+    └── reference/                      # Technical manuals
+├── logs/                               # Rotating operational logs (10 MB × 5)
+├── models/
+│   ├── baseline_monday.pkl             # Serialized ArtifactBundle
+│   └── scalers/
+│       └── robust_training_baseline.pkl
+├── reports/
+│   ├── benchmarks/                     # CIC‑IDS2017 validation reports & figures
+│   ├── forensic_wednesday/             # Case Study: DoS/DDoS
+│   └── forensic_thursday/              # Case Study: Web Attacks / Infiltration
+└── src/
+    ├── config.py                       # HiGISettings dataclass + YAML validation
+    ├── orchestrator.py                 # Top‑level pipeline orchestrator
+    ├── ingestion/
+    │   └── processor_optime.py         # Polars lazy PCAP‑to‑feature pipeline
+    ├── models/
+    │   └── higi_engine.py              # Hilbert Projector + Tribunal engine
+    └── analysis/
+        └── forensic_engine.py          # XAI report generation + MITRE mapping
+```
+
+---
+
+## Documentation & Manuals
+
+HiGI provides comprehensive documentation for different SOC roles. Available in **English** and **Spanish**.
+
+| Role / Manual | Description | Language | Link |
+|---|---|---|---|
+| **Forensic Analyst Guide** | XAI attribution, MITRE mapping & incident triage | 🇺🇸 ENG · 🇪🇸 ESP | [`docs/`](./docs) |
+| **Data Engineering Ref.** | Polars pipeline, feature physics & ingestion | 	🇺🇸 ENG · 🇪🇸 ESP| [`docs/`](./docs) |
+| **Engine Architecture** | Hilbert Projector, GMM & Tribunal logic | 🇺🇸 ENG · 🇪🇸 ESP| [`docs/`](./docs) |
+
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+```bash
+python -m venv ids_env
+source ids_env/bin/activate          # Linux / macOS
+# ids_env\Scripts\activate           # Windows
+
+pip install -r requirements.txt
+```
+
+### 1. Train a Baseline
+
+```bash
+python main.py train  --source data/raw/Monday.pcap     --bundle models/baseline.pkl
+```
+
+### 2. Run Detection
+
+```bash
+
+python main.py detect \
+  --source data/raw/Wednesday_Victim_50.pcap \
+  --bundle models/baseline.pkl
+```
+
+Output: per‑window anomaly scores (`.csv`) and structured incident log (`.json`).
+
+### 3. Generate a Forensic Report
+
+```bash
+python main.py report \
+   --results data/processed/wednesday_results.csv  \
+   --bundle models/baseline_model.pkl \
+   --output-dir reports/forensic_wednesday/ 
+```
+Generates a Markdown report and a PDF report with incident timeline, MITRE ATT&CK mapping, and physical stress radar charts.
+
+### 4. Full Pipeline (Train → Detect → Report)
+
+```bash
+python main.py pipeline \
+  --baseline data/raw/Monday_Victim_50.pcap \
+  --target data/raw/Wednesday_Victim_50.pcap \
+  --model models/baseline_monday \
+  --report-dir reports/forensic_wednesday/
+```
+
+---
+
+## Forensic Engine & XAI
+
+Every confirmed incident produces a structured **forensic autopsy** — not a binary alarm label. The Forensic Engine ([`src/analysis/forensic_engine.py`](/src/analysis/forensic_engine.py)) generates:
+
+### Physical Stress Attribution
+
+For each incident, the engine identifies the **culprit physical family** and the specific features driving the anomaly, ranked by their σ-deviation from baseline. Example output for DoS Slowloris:
+
+```
+Incident #29 | 09:48 – 10:11 EDT | Confidence: 100%
+  Physical Signature:
+    [CONNECTION]  unique_dst_ports   +45.84σ  (SPIKE)   → Socket Exhaustion
+    [FLAGS]       flag_syn_ratio     +9.8σ    (SPIKE)   → Semi-open connection flood
+  MITRE ATT&CK:  T1499.001 (OS Exhaustion Flood)
+  Tribunal Verdict: CRITICAL | BallTree ✅ | GMM ✅ | IForest ✅ | Sentinel ✅
+```
+
+### MITRE ATT&CK Mapping
+
+Each incident is automatically mapped to the closest MITRE ATT&CK technique based on the dominant physical family and directionality profile. Ambiguous cases are flagged for analyst review.
+
+### Forensic Report Artifacts
+
+| Artifact | Format | Description |
+|---|---|---|
+| Incident Timeline | PNG | Temporal distribution of anomaly scores with severity bands |
+| Physical Radar | PNG | Per-family σ-deviation in polar coordinates across incidents |
+| Forensic Report | Markdown | Full narrative autopsy with XAI attribution |
+| Forensic Report | PDF | Print-ready version for SOC documentation |
+
+Reports are filtered by sigma_culprit_min: 2 (configurable).
+<p align="center">
+  <img src="reports/forensic_wednesday/Wednesday_Victim_50_results_radar.png" height="300" alt="Physical Radar">
+  <img src="reports/forensic_wednesday/Wednesday_Victim_50_results_timeline.png" height="300" alt="Incident Timeline"> 
+  <br>
+  <i>Physical Radar and Incident Timeline for the Wednesday DoS/DDoS campaign.</i>
+</p>
+
+---
+
+## Configuration Reference
+
+The complete parameter surface is documented inline in `config.yaml`. Key sections:
+
+| Section | Purpose |
+|---|---|
+| `paths` | I/O directory layout |
+| `ingestion` | Chunk size, parallelism, aggregation window |
+| `training` | Baseline augmentation (Gaussian noise, 5% scale, 10% fraction) |
+| `hilbert` | Blocked PCA variance targets per family (Volume: 95%, Payload: 99%, Flags: 99%, Protocol: 99%, Connection: 95%) |
+| `balltree` | k-NN detector thresholds (P90 → P99.9) and slack |
+| `gmm` | Bayesian GMM parameters, adaptive K range, score normalization |
+| `iforest` | Contamination factor and estimator count |
+| `sentinel` | Per-feature LL thresholds, directionality tracking, Portero veto |
+| `velocity` | Velocity bypass Z-score gate and severity mapping |
+| `tribunal` | Consensus weights and decision threshold |
+| `family_consensus` | Co-firing requirement for borderline escalation |
+| `persistence` | Hysteresis, warmup, moving average window, anti-FP rolling filter |
+| `forensic` | Debounce, sigma filter, confidence filter, MITRE attribution |
+
+---
+
+## Development Standards
+
+HiGI is developed to professional open-source standards suitable for research publication, SOC integration, and community contribution.
+
+- Style: PEP 8 enforced throughout all source modules
+
+- Type Safety: Full static type hinting on all public interfaces
+
+- Documentation: Google‑style docstrings on all public classes and methods
+
+- Configuration: Zero magic numbers — all parameters in config.yaml, validated at startup
+
+- Language: English‑only source code, comments, docstrings, and commit messages
+
+- Modularity: Ingestion, model, analysis, and orchestration layers are independently testable and replaceable
+
+---
+
+## Known Research Gaps & Limitations
+
+HiGI is designed for **honest engineering**. The following limitations are documented transparently:
+
+### What HiGI Does Not Detect (Out of Scope)
+
+**Application‑Layer Semantic Attacks (SQLi, XSS, Command Injection)**. HiGI models the physical structure of traffic (bytes, timing, connection geometry), not the semantic content of payloads. A SQL injection that fits within normal byte volumes will not produce a detectable σ‑deviation. Detection of semantic attacks requires a separate payload inspection engine at Layer 7.
+
+**Operational Deployment Caveats**
+
+* **Stationary baseline dependency**. The system requires a baseline PCAP representative of normal operation. High day‑to‑day variability (diurnal patterns, flash crowds) will elevate false positive rates until dynamic baseline normalisation is implemented (planned for v5.0).
+
+* **Encrypted traffic**. Payload‑family features degrade under TLS, though connection, volume, and flag features remain fully observable.
+
+* **Data‑drop sensor gaps**. Packet‑capture drops during extreme floods create telemetry gaps. HiGI detects and flags these, but anomaly scoring within gaps is incomplete. The Velocity Bypass (Tier 4) is the primary compensating mechanism.
+
+* **Prolonged attack calibration**. During extended attacks (>30 min), feature drift may understate severity. The debounce_seconds: 30 clustering window partially mitigates this.
+
+### What HiGI Does Well
+
+- **Zero-day and novel attack detection** — no signature catalog means no blind spots for previously unseen attack mechanics
+- **Slow-rate attack sensitivity** — Slowloris detected at 45.84σ in `unique_dst_ports`  despite negligible byte volume, a known failure mode for supervised ML models.
+- **Pre-attack reconnaissance detection** — scanning and discovery phases are visible as connection‑family anomalies before any destructive payload is sent.
+- **Interpretable forensic output** — every alert includes a physical culprit (feature + σ-deviation + directionality), enabling analyst triage without black-box trust
+- **Unsupervised operation** — only a clean baseline PCAP is required for deployment; no labelled attack data is needed.
+- **100% Recall on CIC-IDS2017 DoS/DDoS campaigns** with ≤ 1 minute detection latency
+- **0 reportable false positives on 8 hours of benign control traffic** (Monday session).
+
+### Validation Scope
+
+All metrics reported in this README are derived from the CIC‑IDS2017 dataset. While this is the most widely cited benchmark in IDS literature, it has known limitations (synthetic background traffic, repetitive patterns). Validation on additional datasets (CIC‑IDS2019, UNSW‑NB15) and live network traffic is the next step in the research roadmap. See the [Master Benchmark Report](/reports/benchmarks/HiGI_IDS_Master_Benchmark_SoTA_Report.md) for an extended discussion.
+
+---
+
+## Future Roadmap: From Static Forensic to Real-Time Action
+
+
+- **Live Ingestion Bridge:** `scapy.sniff` or `AF_PACKET` socket for sub‑second real‑time feature extraction.
+
+- **Dynamic Thresholding (v5.0):** Sliding‑window baseline to handle non‑stationary network behaviour.
+
+- **Automated Response (Action Tier):** Integration with `iptables`/`nftables` to null‑route sources that trigger the Portero Veto (>20σ).
+
+- **Multi‑dataset validation:** CIC‑IDS2019, UNSW‑NB15, and live network pilots.
+
+---
+
+## License
+
+MIT License — see [`LICENSE`](./LICENSE) for full terms.
+
+---
+
+*HiGI IDS — Created and Developed by Pablo Aguadero. 2026.*
+*Validated against CIC-IDS2017. Reference: Engelen, G., Rimmer, V., & Joosen, W. (2021). Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case Study. IEEE EuroS&PW. doi:10.1109/EuroSPW54576.2021.00015*

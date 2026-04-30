@@ -1,125 +1,52 @@
-################################################################################
-# NADS Project — Production .gitignore
-# Ensures repository excludes artifacts, sensitive data, and build outputs
-################################################################################
+# ==============================================================================
+# HiGI-Sentinel IDS — Final Production .gitignore
+# ==============================================================================
 
-# === PYTHON ARTIFACTS ===
+# --- PYTHON ---
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+.ipynb_checkpoints/
 
-# === TESTING & COVERAGE ===
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.hypothesis/
-
-# === TYPE CHECKING ===
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.pyre/
-
-# === CODE QUALITY ===
-.ruff_cache/
-.pylint_cache/
-
-# === VIRTUAL ENVIRONMENTS ===
-.venv/
-venv/
-ENV/
-env/
-env.bak/
-venv.bak/
+# --- VIRTUAL ENVIRONMENTS ---
+# Ignoramos el entorno virtual completo
 ids_env/
+venv/
+.venv/
+env/
 
-# === DATA SAFETY — ESSENTIAL ===
-# PCAP files: Large, sensitive network captures (privacy critical)
-data/raw/*.pcap
+# --- DATA SAFETY ---
+# Ignoramos los PCAPs (son demasiado grandes para GitHub)
+# Ignoramos todo el contenido de data/raw
+data/raw/**
+# Excepto los archivos .gitkeep para mantener la estructura
+!**/data/raw/**/.gitkeep
 data/raw/*.pcapng
-data/raw/*.pcap.gz
-data/raw/*.pcapng.gz
+data/raw/*.gz
 
-# Processed data excluded from version control (reproducible from raw)
-data/processed/*.csv
-data/processed/*.parquet
+# CONSERVAMOS los resultados procesados (CSV/JSON) para demostración
+# (No hace falta añadir nada aquí, al no estar en la lista de arriba, se subirán)
 
-# === GENERATED ANALYSIS ARTIFACTS ===
-# Plotly interactive visualizations (generated, not source)
-*.html
-reports/*.csv
-reports/*.html
-
-# Machine Learning models (versioned separately, large binary files)
-*.joblib
-*.pkl
-*.pickle
-*.h5
-*.hdf5
-*.pth
-models/*.joblib
+# --- MODELS & BINARIES ---
+# Ignoramos modelos entrenados (binarios .pkl) para mantener el repo ligero
+# Se pueden regenerar con el script 'train'
 models/*.pkl
+models/*.joblib
+models/scalers/*.pkl
+# Pero conservamos las configuraciones JSON de los modelos si existen
+!models/*.json
 
-# === IDE & EDITOR ===
+# --- LOGS ---
+# Ignoramos los archivos de log locales
+logs/*.log
+
+# --- IDE & SYSTEM ---
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-.sublime-project
-.sublime-workspace
-.project
-.pydevproject
-.settings/
-*.iml
-
-# === SYSTEM FILES ===
 .DS_Store
 Thumbs.db
-*.log
-*.pot
 .env
-.env.local
 
-# === BUILD ARTIFACTS ===
-*.o
-*.a
-*.so
-*.dylib
-
-# === DOCUMENTATION BUILD ===
-docs/_build/
-site/
-
-# === TEMPORARY LOCAL FILES ===
-*.tmp
-*.bak
-~*
-.~*
-
-# === OS-SPECIFIC ===
-.AppleDouble
-.LSOverride
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
+# --- MISC ---
+build_codebase.sh
+fullcodebase.md

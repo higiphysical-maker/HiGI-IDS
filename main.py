@@ -69,22 +69,46 @@ Usage examples:
 
 Author: Blue Team Engineering
 Version: 4.0.0
-"""
 
+"""
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+import yaml  # Importación ligera para leer el archivo antes que el resto
+
+# 1. Localizar el archivo de configuración
+_ROOT = Path(__file__).parent
+config_path = _ROOT / "config.yaml"
+
+# 2. Lectura "Pre-flight" de los hilos
+try:
+    with open(config_path, "r") as f:
+        temp_cfg = yaml.safe_load(f)
+        # Buscamos la clave ingestion -> n_jobs (ajusta según tu estructura)
+        n_jobs = str(temp_cfg.get("ingestion", {}).get("n_jobs", 4))
+        
+        # Si el valor es -1 (auto), lo dejamos en 4 para el Notebook o detectamos cores
+except Exception:
+    n_jobs = "4" # Fallback de seguridad
+
+# 3. Configuración del entorno ANTES de los imports pesados
+print(f"[INFO] Setting OMP_NUM_THREADS={n_jobs} based on config.yaml")
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = n_jobs
+os.environ["MKL_NUM_THREADS"] = n_jobs
+os.environ["OPENBLAS_NUM_THREADS"] = n_jobs
+os.environ["VECLIB_MAXIMUM_THREADS"] = n_jobs
+os.environ["NUMEXPR_NUM_THREADS"] = n_jobs
+os.environ["POLARS_MAX_THREADS"] = n_jobs
+os.environ["RAYON_NUM_THREADS"] = n_jobs   
+os.environ["JOBLIB_START_METHOD"] = "forkserver" 
+
 
 import argparse
-import gc
-import json
 import logging
 import logging.handlers
 import sys
-import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -366,7 +390,7 @@ def run_report(args: argparse.Namespace, settings: HiGISettings) -> int:
             results_path=results_path, 
             bundle=bundle
         )
-        logger.info(f"[INFO] Clustering incidents (Debounce: {settings.forensic.debounce_seconds}s)...")
+        logger.info(f"[INFO] Clustering incidents (Debounce: {settings.forensic.debounce_seconds}s)...")    
 
         logger.info(
             f"[INFO] Clustering with {settings.forensic.debounce_seconds:.0f}s debounce…"

@@ -698,44 +698,34 @@ class DetectionPipeline:
             bundle = ArtifactBundle.load(str(self.bundle_path))
             logger.info(f"[✓] Baseline features: {len(bundle.feature_cols)}")
 
-            # ---- ENGINE CONFIG SYNCHRONIZATION ----
-            # Ensure consistency between bundle (training-time) config and deployment (runtime) config
-            # CRITICAL: Blocked PCA is a training-time decision — cannot be changed at runtime
-            from dataclasses import replace
+            # ---- STEP 1.5: RUNTIME CONFIG INJECTION (v4.0 — Persistence Conflict Fix) ----
+            # Hot-swap operational parameters from config.yaml without retraining.
+            # CRITICAL: Blocked PCA is a training-time decision — immutable.
+            logger.info("\n[STEP 1.5] Runtime Config Injection (Persistence Conflict Fix)")
+            logger.info("-" * 90)
             
             bundle_config = bundle.engine.config
-            settings_config = self.settings.to_higi_config()
+            runtime_config = self.settings.to_runtime_config()
             
-            # Verify Blocked PCA consistency (mismatch would corrupt results)
-            if bundle_config.blocked_pca_enabled != settings_config.blocked_pca_enabled:
-                logger.warning(
-                    f"[⚠] Blocked PCA mode mismatch: "
-                    f"bundle={bundle_config.blocked_pca_enabled}, "
-                    f"config={settings_config.blocked_pca_enabled}. "
-                    f"Using bundle training-time configuration (Blocked PCA is immutable)."
-                )
-            else:
+            # Verify Blocked PCA consistency (training-time immutable parameter)
+            if bundle_config.blocked_pca_enabled:
                 logger.debug(
-                    f"[✓] Blocked PCA mode consistent: {bundle_config.blocked_pca_enabled}"
+                    f"[✓] Blocked PCA enabled (training-time immutable): "
+                    f"{bundle_config.blocked_pca_variance_per_family}"
                 )
             
-            # Sync velocity bypass settings from current deployment config
-            if bundle_config.velocity_bypass_enabled != settings_config.velocity_bypass_enabled:
-                logger.info(
-                    f"[*] Velocity bypass mode override: "
-                    f"bundle={bundle_config.velocity_bypass_enabled} → "
-                    f"config={settings_config.velocity_bypass_enabled}"
-                )
-                bundle.engine.config = replace(
-                    bundle_config,
-                    velocity_bypass_enabled=settings_config.velocity_bypass_enabled,
-                    velocity_bypass_threshold=settings_config.velocity_bypass_threshold,
-                    velocity_tribunal_weight=settings_config.velocity_tribunal_weight,
-                )
-            else:
-                logger.debug(
-                    f"[✓] Velocity bypass mode consistent: {bundle_config.velocity_bypass_enabled}"
-                )
+            # Inject hot-swappable runtime parameters
+            # This updates persistence, tribunal weights, velocity bypass thresholds,
+            # forensic settings, and family consensus parameters from config.yaml
+            bundle.engine.update_runtime_config(runtime_config)
+            
+            logger.info(
+                f"[✓] Runtime config injected:"
+                f"\n    alert_minimum_persistence: {bundle.engine.config.alert_minimum_persistence}"
+                f"\n    velocity_bypass_threshold: {bundle.engine.config.velocity_bypass_threshold:.1f}σ"
+                f"\n    tribunal_consensus_threshold: {bundle.engine.config.tribunal_consensus_threshold}"
+                f"\n    family_consensus_enabled: {bundle.engine.config.family_consensus_enabled}"
+            )
 
             # ---- STEP 2: PCAP Ingestion ----
             logger.info("\n[STEP 2] PCAP Ingestion (Test Data)")

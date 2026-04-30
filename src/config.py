@@ -212,6 +212,140 @@ class LoggingSettings:
 
 
 # ============================================================================
+# SPLIT CONFIGURATION — v4.0 PERSISTENCE CONFLICT FIX
+# ============================================================================
+# ModelConfig: Parameters that require retraining.
+# RuntimeConfig: Hot-swappable operational parameters.
+# ============================================================================
+
+@dataclass(frozen=True)
+class ModelConfig:
+    """
+    Mathematical parameters frozen at training time.
+    
+    These are persisted in the .pkl model file and MUST NOT change
+    without retraining. They define the geometry of Hilbert space and the
+    mathematical thresholds of the four-tier detector.
+    
+    v4.0: Velocity features participate in Hilbert space PCA but do not
+    require retraining of VelocityBypassDetector itself (stateless).
+    """
+    # Hilbert space — PCA geometry
+    pca_variance: float = 0.99
+    pca_eigenvalue_max_condition: float = 1e12
+    blocked_pca_enabled: bool = True
+    blocked_pca_variance_per_family: Optional[Dict[str, float]] = field(
+        default_factory=lambda: {
+            "volume": 0.95,
+            "payload": 0.95,
+            "flags": 0.99,
+            "protocol": 0.99,
+            "connection": 0.95,
+        }
+    )
+    
+    # Detection thresholds — Tier 1 (BallTree)
+    threshold_p95: float = 95.0
+    threshold_p99: float = 99.0
+    threshold_p99_9: float = 99.9
+    
+    # Tier 2 (GMM + IForest)
+    reg_covar: float = 0.1
+    iforest_contamination: float = 0.05
+    use_bayesian_gmm: bool = True
+    bayesian_weight_concentration_prior: float = 1e-2
+    univariate_gmm_components: int = 5
+    adaptive_univariate_k: bool = True
+    adaptive_univariate_k_range: Tuple[int, int] = (1, 5)
+    gmm_score_normalization_method: str = "cdf"
+    
+    # Tier 3 (Physical Sentinel) — static thresholds
+    physical_sentinel_enabled: bool = True
+    physical_sentinel_threshold: float = 1e-6
+    per_feature_thresholds: bool = True
+    sentinel_directionality_analysis: bool = True
+    portero_sigma_threshold: float = 20.0
+    
+    # BallTree geometry
+    k_neighbors: int = 5
+    balltree_slack: float = 1.2
+    
+    # Training augmentation (affects baseline model)
+    baseline_augmentation_enabled: bool = True
+    augmentation_noise_scale: float = 0.05
+    augmentation_synthetic_fraction: float = 0.10
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    """
+    Operational parameters that can change without retraining.
+    
+    These are loaded from config.yaml at every inference session.
+    They control detection sensitivity, persistence filtering, and
+    forensic reporting thresholds without modifying the mathematical
+    foundation of the Hilbert space or the four tier-detection geometry.
+    
+    v4.0: Hot-swappable parameters enable detecting short attacks (SQLi, DoS)
+    simply by lowering alert_minimum_persistence in YAML.
+    """
+    # Persistence / hysteresis — Tier 1 post-processing
+    ma_window_size: int = 5
+    transient_threshold: float = 0.4
+    hysteresis_entry_multiplier: float = 1.0
+    hysteresis_exit_multiplier: float = 0.75
+    alert_minimum_persistence: int = 3
+    warmup_multiplier: int = 3
+    
+    # Tribunal — vote aggregation
+    weighted_tribunal: bool = True
+    tribunal_weights: Dict[str, float] = field(
+        default_factory=lambda: {
+            "balltree": 0.25,
+            "gmm": 0.40,
+            "iforest": 0.35,
+        }
+    )
+    consensus_threshold: float = 0.5
+    majority_vote_threshold: int = 2
+    
+    # Tier 4 (Velocity Bypass) — operational tuning
+    velocity_enabled: bool = True
+    velocity_bypass_threshold: float = 5.0
+    velocity_tribunal_weight: float = 0.30
+    velocity_severity_thresholds: Tuple[Tuple[float, int], ...] = field(
+        default_factory=lambda: (
+            (12.0, 3),
+            (8.0, 2),
+            (5.0, 1),
+        )
+    )
+    
+    # Family Consensus — Tier 2 gating
+    family_consensus_enabled: bool = True
+    family_consensus_min_hits: int = 2
+    family_consensus_z_threshold: float = 2.0
+    
+    # Forensic thresholds — post-detection analysis
+    forensic_debounce_seconds: int = 30
+    forensic_data_drop_threshold_seconds: int = 60
+    forensic_sigma_culprit_min: float = 2.0
+    forensic_default_confidence_filter: float = 0.75
+    forensic_default_min_anomalies: int = 3
+    forensic_default_min_duration_seconds: float = 1.0
+    forensic_top_features_per_pc: int = 3
+    forensic_tier_confidence_weights: Dict[str, float] = field(
+        default_factory=lambda: {
+            "balltree": 0.20,
+            "gmm": 0.25,
+            "iforest": 0.20,
+            "physical_sentinel": 0.20,
+            "velocity_bypass": 0.15
+        }
+    )
+
+
+# ============================================================================
 # ROOT SETTINGS
 # ============================================================================
 
@@ -323,6 +457,88 @@ class HiGISettings:
             # FIX-4 — Family consensus
             family_consensus_enabled=self.family_consensus.enabled,
             family_consensus_min_hits=self.family_consensus.min_hits,
+        )
+
+    def to_model_config(self) -> ModelConfig:
+        """
+        Extract mathematical configuration frozen at training time.
+        
+        This is serialized in the .pkl model file. Changing these values
+        requires retraining the engine from scratch.
+        
+        Returns:
+            ModelConfig: Parameters that define Hilbert space geometry
+                         and tier-1/2/3 detector thresholds.
+        """
+        return ModelConfig(
+            pca_variance=self.hilbert.pca_variance_target,
+            pca_eigenvalue_max_condition=self.hilbert.pca_eigenvalue_max_condition,
+            blocked_pca_enabled=self.hilbert.blocked_pca_enabled,
+            blocked_pca_variance_per_family=self.hilbert.blocked_pca_variance_per_family,
+            threshold_p95=self.balltree.threshold_p95,
+            threshold_p99=self.balltree.threshold_p99,
+            threshold_p99_9=self.balltree.threshold_p99_9,
+            reg_covar=self.gmm.reg_covar,
+            iforest_contamination=self.iforest.contamination,
+            use_bayesian_gmm=self.gmm.use_bayesian,
+            bayesian_weight_concentration_prior=self.gmm.bayesian_weight_concentration_prior,
+            univariate_gmm_components=self.gmm.n_components_fallback,
+            adaptive_univariate_k=self.gmm.adaptive_k_enabled,
+            adaptive_univariate_k_range=self.gmm.adaptive_k_range,
+            gmm_score_normalization_method=self.gmm.score_normalization,
+            physical_sentinel_enabled=self.sentinel.enabled,
+            physical_sentinel_threshold=self.sentinel.global_threshold,
+            per_feature_thresholds=self.sentinel.per_feature_thresholds,
+            sentinel_directionality_analysis=self.sentinel.directionality_analysis,
+            portero_sigma_threshold=self.sentinel.portero_sigma_threshold,
+            k_neighbors=self.balltree.k_neighbors,
+            balltree_slack=self.balltree.slack,
+            baseline_augmentation_enabled=self.training.baseline_augmentation_enabled,
+            augmentation_noise_scale=self.training.augmentation_noise_scale,
+            augmentation_synthetic_fraction=self.training.augmentation_synthetic_fraction,
+        )
+
+    def to_runtime_config(self) -> RuntimeConfig:
+        """
+        Extract operational parameters that can change without retraining.
+        
+        These are loaded from config.yaml at every inference session.
+        They control persistence filtering, tribunal voting, velocity detection,
+        and forensic reporting without modifying the mathematical foundation.
+        
+        Returns:
+            RuntimeConfig: Hot-swappable detection thresholds and operational parameters.
+        """
+        return RuntimeConfig(
+            ma_window_size=self.persistence.ma_window_size,
+            transient_threshold=self.persistence.transient_threshold,
+            hysteresis_entry_multiplier=self.persistence.hysteresis_entry_multiplier,
+            hysteresis_exit_multiplier=self.persistence.hysteresis_exit_multiplier,
+            alert_minimum_persistence=self.persistence.alert_minimum_persistence,
+            warmup_multiplier=self.persistence.warmup_multiplier,
+            weighted_tribunal=self.tribunal.weighted_mode,
+            tribunal_weights={
+                "balltree": self.tribunal.weights.balltree,
+                "gmm": self.tribunal.weights.gmm,
+                "iforest": self.tribunal.weights.iforest,
+            },
+            consensus_threshold=self.tribunal.consensus_threshold,
+            majority_vote_threshold=self.tribunal.majority_vote_threshold,
+            velocity_enabled=self.velocity.enabled,
+            velocity_bypass_threshold=self.velocity.bypass_threshold,
+            velocity_tribunal_weight=self.velocity.tribunal_weight,
+            velocity_severity_thresholds=self.velocity.severity_thresholds,
+            family_consensus_enabled=self.family_consensus.enabled,
+            family_consensus_min_hits=self.family_consensus.min_hits,
+            family_consensus_z_threshold=self.family_consensus.z_threshold,
+            forensic_debounce_seconds=self.forensic.debounce_seconds,
+            forensic_data_drop_threshold_seconds=self.forensic.data_drop_threshold_seconds,
+            forensic_sigma_culprit_min=self.forensic.sigma_culprit_min,
+            forensic_default_confidence_filter=self.forensic.default_confidence_filter,
+            forensic_default_min_anomalies=self.forensic.default_min_anomalies,
+            forensic_default_min_duration_seconds=self.forensic.default_min_duration_seconds,
+            forensic_top_features_per_pc=self.forensic.top_features_per_pc,
+            forensic_tier_confidence_weights=self.forensic.tier_confidence_weights,
         )
 
 

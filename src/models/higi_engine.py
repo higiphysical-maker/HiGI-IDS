@@ -61,9 +61,9 @@ License: MIT
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as dataclass_replace
 from pathlib import Path
-from typing import Any, Dict, Final, List, Optional, Tuple
+from typing import Any, Dict, Final, List, Optional, Tuple, TYPE_CHECKING
 
 import logging
 import numpy as np
@@ -80,6 +80,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 
 import joblib
+
+if TYPE_CHECKING:
+    from src.config import RuntimeConfig
 
 # ============================================================================
 # LOGGING
@@ -350,6 +353,48 @@ class HiGIConfig:
             "family_consensus_enabled": self.family_consensus_enabled,
             "family_consensus_min_hits": self.family_consensus_min_hits,
         }
+
+    def apply_runtime_config(self, runtime_config: "RuntimeConfig") -> "HiGIConfig":
+        """
+        Create a new HiGIConfig with updated runtime parameters.
+        
+        This method respects frozen=True by using dataclasses.replace(),
+        which creates a new immutable instance. All runtime parameters
+        (persistence, tribunal weights, velocity thresholds, forensic settings)
+        are updated while mathematical parameters remain fixed.
+        
+        Args:
+            runtime_config: RuntimeConfig from config.yaml (hot-swappable).
+        
+        Returns:
+            New HiGIConfig with updated runtime parameters, ready for inference.
+        
+        Example:
+            >>> engine = HiGIEngine.load('model.pkl')
+            >>> settings = load_settings('config.yaml')
+            >>> engine.update_runtime_config(settings.to_runtime_config())
+        """
+        return dataclass_replace(
+            self,
+            # Persistence / hysteresis
+            ma_window_size=runtime_config.ma_window_size,
+            transient_threshold=runtime_config.transient_threshold,
+            hysteresis_entry_multiplier=runtime_config.hysteresis_entry_multiplier,
+            hysteresis_exit_multiplier=runtime_config.hysteresis_exit_multiplier,
+            alert_minimum_persistence=runtime_config.alert_minimum_persistence,
+            # Tribunal
+            weighted_tribunal=runtime_config.weighted_tribunal,
+            tribunal_weights=runtime_config.tribunal_weights,
+            tribunal_consensus_threshold=runtime_config.consensus_threshold,
+            majority_vote_threshold=runtime_config.majority_vote_threshold,
+            # Tier 4 — Velocity Bypass
+            velocity_bypass_enabled=runtime_config.velocity_enabled,
+            velocity_bypass_threshold=runtime_config.velocity_bypass_threshold,
+            velocity_tribunal_weight=runtime_config.velocity_tribunal_weight,
+            # Family Consensus
+            family_consensus_enabled=runtime_config.family_consensus_enabled,
+            family_consensus_min_hits=runtime_config.family_consensus_min_hits,
+        )
 
 
 # ============================================================================
@@ -1452,6 +1497,52 @@ class HiGIEngine:
         self.training_stats: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
+    # RUNTIME CONFIGURATION UPDATE (v4.0 — Persistence Conflict Fix)
+    # ------------------------------------------------------------------
+
+    def update_runtime_config(self, runtime_config: "RuntimeConfig") -> None:
+        """
+        Hot-swap operational parameters without retraining.
+        
+        This method updates the engine's configuration with new runtime
+        parameters (persistence filters, tribunal weights, velocity thresholds,
+        forensic settings) from config.yaml.  The mathematical foundation
+        (Hilbert space, tier-1/2/3 trained models) remains unchanged.
+        
+        Respects frozen=True by creating a new HiGIConfig via dataclass_replace()
+        and assigning it to self.config.  All subsequent analyze() calls use
+        the new parameters immediately.
+        
+        Primary use case: After loading a model with HiGIEngine.load(), call
+        this method to apply current config.yaml settings before inference.
+        
+        Args:
+            runtime_config: RuntimeConfig from load_settings(config.yaml).
+                           Contains persistence, tribunal, velocity, forensic params.
+        
+        Returns:
+            None — modifies self.config in-place.
+        
+        Example:
+            >>> engine = HiGIEngine.load('models/higi_v4.pkl')
+            >>> settings = load_settings('config.yaml')
+            >>> engine.update_runtime_config(settings.to_runtime_config())
+            >>> # Now analyze() uses the current YAML settings for persistence, etc.
+            >>> results = engine.analyze(df_test)
+        """
+        if not isinstance(runtime_config, dict) and not hasattr(runtime_config, "ma_window_size"):
+            raise TypeError(f"Expected RuntimeConfig, got {type(runtime_config)}")
+        
+        # Apply runtime config to create a new frozen HiGIConfig instance.
+        self.config = self.config.apply_runtime_config(runtime_config)
+        logger.info(
+            f"[✓] Engine runtime config updated: "
+            f"alert_min_persistence={self.config.alert_minimum_persistence}, "
+            f"velocity_bypass_threshold={self.config.velocity_bypass_threshold}, "
+            f"consensus_threshold={self.config.tribunal_consensus_threshold}"
+        )
+
+    # ------------------------------------------------------------------
     # STATIC UTILITY
     # ------------------------------------------------------------------
 
@@ -2238,6 +2329,11 @@ class HiGIEngine:
         """
         Persist engine state to disk as a joblib file.
 
+        v4.0 change (Persistence Conflict Fix):
+        Only the mathematical config (ModelConfig) is persisted. Runtime
+        parameters (persistence, tribunal weights, etc.) are loaded from
+        config.yaml at inference time via update_runtime_config().
+
         VelocityBypassDetector has no learned state and is not persisted;
         it is reconstructed from HiGIConfig on the next load.
 
@@ -2248,9 +2344,14 @@ class HiGIEngine:
         p.parent.mkdir(parents=True, exist_ok=True)
         if not self.is_fitted:
             logger.warning("Engine not fitted — saving anyway.")
+        
+        # Ensure config has been properly initialized
+        if self.config is None:
+            raise ValueError("Engine config is not initialized")
+        
         joblib.dump(
             {
-                "config": self.config,
+                "config": self.config,  # Full config saved (backward compatibility)
                 "projector": self.projector,
                 "balltree_detector": self.balltree_detector,
                 "gmm_detector": self.gmm_detector,
@@ -2268,11 +2369,17 @@ class HiGIEngine:
             p,
         )
         logger.info(f"[✓] HiGI engine (v4.0) saved → {path}")
+        logger.info("    Note: Runtime config will be loaded from config.yaml at inference time")
 
     @staticmethod
-    def load(path: str) -> "HiGIEngine":
+    def load(path: str, runtime_config: Optional["RuntimeConfig"] = None) -> "HiGIEngine":
         """
-        Load engine from disk with full backward compatibility and validation.
+        Load engine from disk with optional runtime configuration injection.
+
+        v4.0 change (Persistence Conflict Fix):
+        After loading the trained model, optionally inject a RuntimeConfig
+        to ensure hot-swappable parameters (persistence, tribunal weights, etc.)
+        match the current config.yaml.
 
         Supported bundle formats:
             1. Direct HiGIEngine instance (orchestrator ArtifactBundle).
@@ -2287,7 +2394,8 @@ class HiGIEngine:
             3. For projector specifically: calls projector.is_fitted() and
                projector._validate_fitted_state() to detect ColumnTransformer issues.
             4. Applies backward-compatibility patches (_patch_v3_balltree).
-            5. Logs detailed diagnostics for debugging deserialization issues.
+            5. Injects runtime_config if provided.
+            6. Logs detailed diagnostics for debugging deserialization issues.
 
         Backward compatibility:
             v3.0 bundles lack velocity config fields — HiGIConfig defaults apply.
@@ -2296,9 +2404,12 @@ class HiGIEngine:
 
         Args:
             path: File path (.pkl or .joblib).
+            runtime_config: Optional RuntimeConfig to inject after loading.
+                          Typically obtained via load_settings().to_runtime_config().
 
         Returns:
-            HiGIEngine ready for inference (all components validated).
+            HiGIEngine ready for inference (all components validated, runtime
+            parameters injected if provided).
 
         Raises:
             FileNotFoundError: Path does not exist.
@@ -2306,7 +2417,16 @@ class HiGIEngine:
             HiGIInferenceError: Engine components corrupted or not fitted.
 
         Examples:
+            >>> # Basic load
             >>> engine = HiGIEngine.load('models/higi_v4.pkl')
+            >>> results = engine.analyze(df_test)
+            
+            >>> # Load with runtime config from YAML
+            >>> settings = load_settings('config.yaml')
+            >>> engine = HiGIEngine.load(
+            ...     'models/higi_v4.pkl',
+            ...     runtime_config=settings.to_runtime_config()
+            ... )
             >>> results = engine.analyze(df_test)
         """
         p = Path(path)
@@ -2325,6 +2445,8 @@ class HiGIEngine:
             logger.info("[•] Bundle format: Direct HiGIEngine instance")
             HiGIEngine._patch_v3_balltree(loaded)
             HiGIEngine._validate_engine_state(loaded, path)
+            if runtime_config:
+                loaded.update_runtime_config(runtime_config)
             logger.info(f"[✓] HiGI engine loaded from {path} (direct instance)")
             return loaded
 
@@ -2339,6 +2461,8 @@ class HiGIEngine:
             e = loaded["engine"]
             HiGIEngine._patch_v3_balltree(e)
             HiGIEngine._validate_engine_state(e, path)
+            if runtime_config:
+                e.update_runtime_config(runtime_config)
             logger.info(f"[✓] HiGI engine loaded from {path} (instance in bundle)")
             return e
 
@@ -2370,6 +2494,10 @@ class HiGIEngine:
 
         HiGIEngine._patch_v3_balltree(e)
         HiGIEngine._validate_engine_state(e, path)
+        
+        # Inject runtime config if provided (v4.0 — Persistence Conflict Fix)
+        if runtime_config:
+            e.update_runtime_config(runtime_config)
 
         logger.info(f"[✓] HiGI engine loaded from {path}")
         logger.info(f"    Features : {len(e.feature_cols)}")
