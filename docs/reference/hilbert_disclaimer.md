@@ -11,7 +11,7 @@ The analogy is not merely rhetorical. In both cases, the fundamental operation i
 
 In concrete engineering terms, HiGI's "Hilbert space" is a finite-dimensional Euclidean space produced by the following sequence of transformations:
 
-´´´mermaid
+```mermaid
 graph TD
     A["<b>Raw Features</b><br>x<sub>t</sub> ∈ ℝ<sup>42</sup><br><i>(RobustScaler-normalised)</i>"]
     
@@ -24,7 +24,7 @@ graph TD
     C["<b>Whitened Hilbert Space</b><br>z<sub>t</sub> ∈ ℝ<sup>k</sup><br><i>(k ≤ 42, whitened principal components)</i>"]
     
     C -->|"<b>Tribunal Consensus</b><br><i>(Baseline displacement)</i>"| D["<b>Physical Displacement Analysis</b>"]
-´´´
+```
 
 The resulting space `ℝ^k` has the property that:
 
