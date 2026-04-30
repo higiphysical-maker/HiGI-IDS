@@ -255,9 +255,6 @@ HiGI's generalisation capability is conditioned on three assumptions:
     * **Justification:** These incidents show localized deviations. **Nmap** is clearly isolated by the **Flags** and **Connection** sensors, while **Infiltration** and **Brute Force** signatures appear in the **Payload** and **Protocol** families, mapping directly to the unauthorized access attempts.
 
 **Insight Conveyed:**
-This heatmap constitutes the **physical fingerprint atlas of network attacks**, providing the definitive XAI (Explainable AI) proof of the HiGI engine. By isolating specific deviations—such as the **1,917.7$\sigma$** Payload signature in **Slowhttptest** versus the **45.8$\sigma$** Connection signature in **Slowloris**—the system demonstrates an ability to diagnose the "physical anatomy" of an incident. This causal transparency allows the operator to understand exactly *why* a verdict was reached, a capability that is architecturally absent in the black-box models of TRBMA [7] or GreenShield [5].
-
-**Insight Conveyed:**
 This heatmap constitutes the **physical fingerprint atlas of network attacks**. Each attack class produces a unique signature across the eight feature families. This visualization provides definitive proof of HiGI’s native XAI: when a **DoS Hulk** occurs, the system doesn't just issue a label; it visually demonstrates a total saturation ($10^5\sigma$) in the **Volume_flood** family. Conversely, for an **Infiltration**, it identifies a subtle but specific deviation in the **Payload** sub-layer. This ability to map anomalies to their "physical anatomy" provides a level of forensic transparency that is architecturally absent in black-box models such as TRBMA [7] or GreenShield [5].
 
 ---
