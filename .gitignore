@@ -17,10 +17,11 @@ env/
 
 # --- DATA SAFETY ---
 # Ignoramos los PCAPs (son demasiado grandes para GitHub)
-# Ignoramos todo el contenido de data/raw
-data/raw/**
-# Excepto los archivos .gitkeep para mantener la estructura
-!**/data/raw/**/.gitkeep
+# Ignorar absolutamente todo dentro de data/raw/
+data/raw/*
+
+# Excepto el archivo que mantiene la carpeta viva
+!data/raw/.gitkeep
 data/raw/*.pcapng
 data/raw/*.gz
 
