@@ -6,9 +6,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![PEP8](https://img.shields.io/badge/code%20style-PEP8-green.svg)](https://peps.python.org/pep-0008/)
 [![CIC-IDS2017 Validated](https://img.shields.io/badge/benchmark-CIC--IDS2017-orange.svg)](./reports/benchmarks/)
-<p align="center">
-  <img src="HiGI.png" width="300" alt="HiGI IDS Logo">
-</p>
 
 ---
 
