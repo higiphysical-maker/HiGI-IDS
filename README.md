@@ -19,6 +19,7 @@
 - [Project Structure](#project-structure)
 - [Documentation & Manuals](#documentation--manuals)
 - [Quickstart](#quickstart)
+- [Docker Quickstart](#docker-quickstart)
 - [Pipeline Execution Showcase](#pipeline-execution-showcase)
 - [Forensic Engine & XAI](#forensic-engine--xai)
 - [Configuration Reference](#configuration-reference)
@@ -235,35 +236,57 @@ All configurable parameters — thresholds, sigma values, PCA variance targets, 
 
 ```
 HiGI/
-├── config.yaml                         # Unified system configuration (SSoT)
-├── main.py                             # CLI entry point
-├── data/
-│   ├── processed/                      # Detection result CSVs and JSON
-│   └── raw/                            # Input PCAPs (not versioned)
-├── docs/
-│   ├── eng/                            # English manuals
-│   └── esp/                            # Spanish manuals
-    └── reference/                      # Technical manuals
-├── logs/                               # Rotating operational logs (10 MB × 5)
-├── models/
-│   ├── baseline_monday.pkl             # Serialized ArtifactBundle
-│   └── scalers/
-│       └── robust_training_baseline.pkl
-├── reports/
-│   ├── benchmarks/                     # CIC‑IDS2017 validation reports & figures
-│   ├── forensic_wednesday/             # Case Study: DoS/DDoS
-│   └── forensic_thursday/              # Case Study: Web Attacks / Infiltration
-└── src/
-    ├── config.py                       # HiGISettings dataclass + YAML validation
-    ├── orchestrator.py                 # Top‑level pipeline orchestrator
-    ├── utils/                          # Preflight, BLAS threads & joblib configuration
+│
+├── config.yaml                         # Central configuration (Single Source of Truth)
+├── main.py                             # CLI entry point (train / detect / report)
+│
+├── Dockerfile                          # Docker image definition
+├── docker-compose.yml                  # Docker Compose service definition
+├── requirements.txt                    # Python dependencies
+│
+├── README.md                           # Project overview and documentation
+├── LICENSE                             # MIT License
+│
+├── DEMO_NOTEBOOK.ipynb                 # End‑to‑end pipeline demo notebook
+│
+├── data/                               # Runtime data (ignored by Git)
+│   ├── raw/                            #   Input PCAP files (CIC‑IDS2017, CIC‑IDS2019 …)
+│   └── processed/                      #   Detection results (.csv / .json)
+│
+├── models/                             # Trained artifacts 
+│   ├── *.pkl, *.json                   #   Serialized ArtifactBundles & sidecars
+│   └── scalers/                        #   Fitted RobustScaler objects
+│
+├── reports/                            # Generated evidence (committed for traceability)
+│   ├── benchmarks/                     #   CIC‑IDS2017 validation reports & figures
+│   ├── forensic_monday/                #   Forensic report — Monday (benign control)
+│   ├── forensic_wednesday/             #   Forensic report — Wednesday (DoS/DDoS)
+│   └── forensic_thursday/              #   Forensic report — Thursday (Web Attacks)
+│
+├── logs/                               # Rotating operational logs (ignored by Git)
+│
+├── docs/                               # Technical manuals (English & Spanish)
+│   ├── eng/                            #   English versions
+│   ├── esp/                            #   Spanish versions
+│   └── reference/                      #   Hilbert disclaimer & engine references
+│
+└── src/                                # Source code
+    ├── config.py                       #   HiGISettings dataclass + YAML validation
+    ├── orchestrator.py                 #   Top‑level pipeline orchestrator
+    ├── utils/                          #   Preflight, BLAS threads & joblib configuration
     ├── ingestion/
-    │   └── processor_optime.py         # Polars lazy PCAP‑to‑feature pipeline
+    │   ├── __init__.py
+    │   └── processor_optime.py         #   Polars lazy PCAP‑to‑feature pipeline
     ├── models/
-    │   └── higi_engine.py              # Hilbert Projector + Tribunal engine
+    │   ├── __init__.py
+    │   └── higi_engine.py              #   Hilbert Projector + 4‑Tier Tribunal engine
     └── analysis/
-        └── forensic_engine.py          # XAI report generation + MITRE mapping
+        ├── __init__.py
+        └── forensic_engine.py          #   XAI report generation & MITRE mapping
 ```
+
+> **Note:** The `data/raw/` and `logs/` folders are ignored by Git. The structure above shows what a fully operational local copy looks like after running the pipeline.
+
 
 ---
 
@@ -321,6 +344,87 @@ python main.py report \
 Generates a Markdown report and a PDF report with incident timeline, MITRE ATT&CK mapping, and physical stress radar charts.
 
 ---
+
+## Docker Quickstart
+
+HiGI ships with a [`Dockerfile`](/Dockerfile) that lets you run the full pipeline inside a container — no Python environment needed beyond Docker itself.
+
+### What are the volumes for?
+
+HiGI reads and writes files in three places: PCAPs and results live in `data/`, the trained model is stored in `models/`, and forensic reports land in `reports/`. The container does not bundle any of this; you mount your local copies so everything persists on your machine after the container exits. That is what the `-v $(pwd)/data:/app/data` flags do: they map a folder on your host (left side) into the container (right side).
+
+### Build the image
+
+```bash
+docker build -t higi-ids .
+```
+### 1. Train a Baseline
+```bash
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/models:/app/models \
+  higi-ids train \
+  --source data/raw/Monday.pcap \
+  --bundle models/baseline.pkl
+  ```
+
+  ### 2. Run Detection
+  ```bash
+  docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/models:/app/models \
+  higi-ids detect \
+  --source data/raw/Wednesday_Victim_50.pcap \
+  --bundle models/baseline.pkl
+  ```
+
+  ### 3. Generate a Forensic Report
+  ```bash
+  docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/models:/app/models \
+  -v $(pwd)/reports:/app/reports \
+  higi-ids report \
+  --results data/processed/Wednesday_Victim_50_results.csv \
+  --bundle models/baseline.pkl \
+  --output-dir reports/wednesday
+  ```
+  The report (PDF + Markdown + `.png`) is written to `reports/wednesday/`.
+
+  ### Optional: use docker‑compose
+
+  ```yaml
+# docker-compose.yml
+services:
+  higi:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./reports:/app/reports
+      - ./config.yaml:/app/config.yaml:ro
+    working_dir: /app
+    entrypoint: ["tini", "--", "python", "main.py"]
+  ```
+  Build the image with (you can download the [`docker-compose.yml`](/docker-compose.yml)):
+  ```bash
+docker-compose build
+  ```
+  Then run any command with:
+  ```bash
+# Train
+docker-compose run --rm higi train --source data/raw/Monday.pcap --bundle models/baseline.pkl
+
+# Detect
+docker-compose run --rm higi detect --source data/raw/Wednesday_Victim_50.pcap --bundle models/baseline.pkl
+
+# Report
+docker-compose run --rm higi report --results data/processed/Wednesday_Victim_50_results.csv --bundle models/baseline.pkl --output-dir reports/wednesday
+  ```
+>Note: The image contains no PCAPs and no pre‑trained models. You need to provide your own captures and mount them as shown above.
+
+---
+
 
 ##  Pipeline Execution Showcase
 

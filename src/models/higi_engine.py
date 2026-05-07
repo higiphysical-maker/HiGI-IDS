@@ -2009,21 +2009,30 @@ class HiGIEngine:
             if n >= pw:
                 pre_bypass = vel_bypass.copy()
                 confirmed = (
-                    pd.Series(is_anomaly)
+                    pd.Series(is_anomaly.copy())          # fresh copy
                     .rolling(window=pw, min_periods=pw).min()
                     .fillna(0).astype(int).values
                 )
+                confirmed = np.array(confirmed, copy=True) # ensure writable
                 filtered = (
                     pd.Series(confirmed)
                     .rolling(window=pw, min_periods=1).max()
                     .fillna(0).astype(int).values
                 )
+                filtered = np.array(filtered, copy=True)  # ensure writable
+                
+                # DEBUG: identificar línea exacta del error
+                logger.debug(f"DEBUG: is_anomaly.flags.writeable={is_anomaly.flags.writeable}")
+                logger.debug(f"DEBUG: sev_final.flags.writeable={sev_final.flags.writeable}")
+                logger.debug(f"DEBUG: filtered.flags.writeable={filtered.flags.writeable}")
+                
                 n_suppressed = int(is_anomaly.sum()) - int(filtered.sum())
                 is_anomaly = filtered
-                is_anomaly[pre_bypass] = 1   # Bypass samples survive filter.
+                is_anomaly[pre_bypass] = 1
+                sev_final = np.array(sev_final, copy=True)  # ensure writable
                 sev_final[is_anomaly == 0] = 0
                 logger.info(f"  Suppressed: {n_suppressed:,} | Remaining: {is_anomaly.sum():,}")
-
+                logger.debug(f"DEBUG: después de asignaciones - is_anomaly.writeable={is_anomaly.flags.writeable}, sev_final.writeable={sev_final.flags.writeable}")
             # ── Step 3E: Adaptive Hysteresis (bypass protected) ── FIX-3 ───
             if self.config.physical_sentinel_enabled:
                 logger.info("\n[STEP 3E] Adaptive Hysteresis (FIX-3)")
@@ -2040,6 +2049,7 @@ class HiGIEngine:
                     entry_multiplier=self.config.hysteresis_entry_multiplier,
                     exit_multiplier=self.config.hysteresis_exit_multiplier,
                 )
+                is_anomaly = np.array(is_anomaly, copy=True)
                 is_anomaly[vel_bypass] = 1   # Bypass samples survive hysteresis.
                 sev_final[is_anomaly == 0] = 0
                 sev_final[(is_anomaly == 1) & (sev_final == 0)] = 1

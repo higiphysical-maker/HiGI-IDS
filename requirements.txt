@@ -6,6 +6,7 @@ pyarrow>=14.0.0
 scikit-learn>=1.4.0
 scipy>=1.12.0
 PyYAML>=6.0.1
+dpkt==1.9.8
 
 # --- Parallel Computing & Thread Control ---
 threadpoolctl>=3.1.0  # Zero-Trust thread management (prevent nested parallelism)
@@ -24,3 +25,4 @@ tqdm>=4.66.0
 
 # --- Typing & Standards ---
 typing-extensions>=4.9.0
+
