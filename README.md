@@ -428,11 +428,15 @@ docker-compose run --rm higi report --results data/processed/Wednesday_Victim_50
 
 ##  Pipeline Execution Showcase
 
-For a pre-rendered, step-by-step walkthrough of the **HiGI Engine** in action, refer to the [Demo Notebook](DEMO_NOTEBOOK.ipynb). 
+For a pre-rendered, step-by-step walkthrough of the **HiGI Engine** in action, refer to the [**Demo Notebook**](DEMO_NOTEBOOK.ipynb). 
 
 This showcase captures a real-world execution of the full pipeline—from model training to forensic anomaly reporting—allowing you to audit the physical logic and internal logs without the need for a local environment setup or large PCAP datasets.
 
 > Note: The execution shown is optimized for traffic originating from the .50 host at [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html) as defined in the project's baseline.
+
+> **TIP:** If the notebook doesn't render correctly on GitHub (due to its large outputs), you can view it perfectly formatted on **nbviewer**:  
+
+>  [**View the Fully Executed Notebook on nbviewer**](https://nbviewer.jupyter.org/github/higiphysical-maker/HiGI-IDS/blob/main/DEMO_NOTEBOOK.ipynb)
 
 ---
 
