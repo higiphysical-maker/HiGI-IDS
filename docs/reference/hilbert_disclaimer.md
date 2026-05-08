@@ -29,6 +29,71 @@ graph TD
 The resulting space `ℝᵏ` has the property that:
 
 1. **Euclidean distances approximate Mahalanobis distances** in the original feature space, because the Blocked PCA whitening effectively applies the inverse square root of the per-family covariance matrix.
+    <details>
+    <summary><b>Click to expand the full derivation</b></summary>
+
+    Let $\mathbf{x} \in \mathbb{R}^n$ be a feature vector with mean $\boldsymbol{\mu}$ and
+    covariance matrix $\boldsymbol{\Sigma}$.  The Mahalanobis distance of a point
+    $\mathbf{x}$ to the centre of the distribution is
+
+    $$D_M(\mathbf{x}) = \sqrt{(\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})}\, .$$
+
+    Because $\boldsymbol{\Sigma}$ is symmetric and positive definite, it can be
+    diagonalised:
+
+    $$\boldsymbol{\Sigma} = \mathbf{U} \boldsymbol{\Lambda} \mathbf{U}^\top,$$
+
+    where $\mathbf{U}$ is the orthogonal matrix of eigenvectors
+    ($\mathbf{U}^\top \mathbf{U} = \mathbf{I}$) and $\boldsymbol{\Lambda}$ is the
+    diagonal matrix of eigenvalues.  The *whitening* transformation is defined as
+
+    $$\mathbf{z} = \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}).$$
+
+    Now compute the squared Euclidean norm of $\mathbf{z}$:
+
+    $$
+    \begin{aligned}
+    \|\mathbf{z}\|_2^2
+    &= \mathbf{z}^\top \mathbf{z} \\
+    &= \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr)^\top
+    \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr) \\
+    &= (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U}
+    (\boldsymbol{\Lambda}^{-1/2})^\top \boldsymbol{\Lambda}^{-1/2}
+    \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) .
+    \end{aligned}
+    $$
+
+    Since $\boldsymbol{\Lambda}$ is diagonal,
+    $(\boldsymbol{\Lambda}^{-1/2})^\top = \boldsymbol{\Lambda}^{-1/2}$ and
+    $\boldsymbol{\Lambda}^{-1/2}\boldsymbol{\Lambda}^{-1/2} = \boldsymbol{\Lambda}^{-1}$,
+    so
+
+    $$
+    \|\mathbf{z}\|_2^2
+    = (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U} \boldsymbol{\Lambda}^{-1} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) .
+    $$
+
+    Using the matrix inverse identity
+    $\boldsymbol{\Sigma}^{-1} = (\mathbf{U} \boldsymbol{\Lambda} \mathbf{U}^\top)^{-1}
+    = \mathbf{U} \boldsymbol{\Lambda}^{-1} \mathbf{U}^\top$, we obtain
+
+    $$
+    \|\mathbf{z}\|_2^2 = (\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu}) ,
+    $$
+
+    hence
+
+    $$
+    \boxed{\|\mathbf{z}\|_2 = \sqrt{(\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})} = D_M(\mathbf{x}) } .
+    $$
+
+    In words: **after whitening the feature space, Euclidean distance is identical
+    to the Mahalanobis distance in the original space.**  This is why HiGI’s
+    BallTree detector, which uses plain Euclidean distance, is actually measuring
+    statistically meaningful deviations from the baseline.
+
+    </details>
+
 2. **Each principal component maps to exactly one physical family**, because Blocked PCA operates independently per family. This is the property that makes forensic attribution possible: the PCA component that deviates most from the baseline can be directly traced back to its feature family.
 3. **The space is maximally compact** for the given variance retention targets (`blocked_pca_variance_per_family`). Features with low discriminative power are collapsed into fewer components, reducing BallTree computation and improving statistical power.
 

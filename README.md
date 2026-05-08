@@ -33,11 +33,27 @@
 
 Traditional Intrusion Detection Systems operate on a **signature catalog**: a curated list of known-bad patterns. This model is fundamentally reactive — it can only identify what it has already seen. Against novel vectors, slow-rate attacks, or protocol abusers that stay within byte-volume thresholds, signature-based systems are blind.
 
-HiGI takes a different approach. Instead of asking "does this traffic match a known attack?", it asks: "Is this traffic statistically consistent with the normal physiology of this network?"
+HiGI takes a different approach: it treats network traffic as a **measurable physical system**.  
+We project network flows into a **Physics Feature Space (PFS)** — which we call the **"Hilbert Space"** of the system. This nomenclature is a deliberate conceptual bridge to Quantum Mechanics: just as a quantum state is a vector in a Hilbert space that "collapses" upon measurement, HiGI represents network states as vectors whose "collapse" (via the Tribunal of Consensus) results in a discrete severity level. In engineering terms, this space is a **whitened metric subspace** obtained via Blocked PCA. In this projection, the baseline distribution occupies a compact, high-density region, and **Euclidean distances are identical to Mahalanobis distances [(*why?*)](./docs/reference/hilbert_disclaimer.md)**. This allows us to measure anomalies in standard deviations ($\sigma$): a unit that is physically interpretable and magnitude-comparable across different network environments.
 
-Network flows are treated as multi-dimensional physical observables — velocity, payload continuity, connection kinematics, protocol ratios — and projected into a reduced metric space where anomaly detection becomes a geometric and probabilistic problem.   
-We call this reduced space "Hilbert space" as a nod to quantum mechanics([why?](docs/reference/hilbert_disclaimer.md)). In practice, it is a finite-dimensional Euclidean space obtained via Blocked PCA with whitening, where Euclidean distance approximates the Mahalanobis distance from the baseline — making σ‑deviations geometrically meaningful.  
-Anomalies are measured in standard deviations (σ) from a learned baseline: a unit that is physically interpretable and threshold-agnostic across different network environments.
+### As a Data Science Project
+
+While HiGI is showcased as an IDS, it is fundamentally an **applied anomaly
+detection pipeline for high-dimensional, non-stationary time-series data**.
+The architecture is domain-agnostic:
+
+- **Unsupervised Ensemble**: Combines density estimation (GMM) with isolation-based
+  methods (IForest) and a geometric gatekeeper (BallTree).
+- **Physics-Informed Feature Engineering**: Domain-driven dimensionality reduction
+  before statistical inference.
+- **XAI & Attribution**: Automated mapping of statistical outliers to a
+  human-readable taxonomy (MITRE), closing the full analytical cycle:
+  question → data → features → model → validation → communication.
+- **Production-Grade Infrastructure**: Polars-powered ingestion, Dockerized
+  microservices, and reproducible artifacts.
+
+This framework is directly transferable to **fraud detection, predictive
+maintenance, or complex system monitoring**.
 
 ### The Tribunal of Consensus
 
@@ -77,9 +93,9 @@ graph TD
         direction TB
         YJ[Yeo-Johnson Power Transform <br/>Gaussianization & P99 Clipping]
         BPCA[Blocked PCA by Physical Families <br/>Volume, Payload, Flags, Protocol, Conn]
-        HILBERT[fa:fa-vector-square Hilbert Space Projection <br/>H ≈ 17-25 Dimensions, Whiten=True]
+        PFS[fa:fa-vector-square Physics Feature Space (PFS) <br/>PCA Whitened · 17–25 dims <br/>Euclidean ≈ Mahalanobis distance]
         
-        YJ --> BPCA --> HILBERT
+        YJ --> BPCA --> PFS
     end
 
     VEL_Z --> Data_Conditioning
@@ -93,11 +109,11 @@ graph TD
         T2 --> T3[Tier 3: Physical Sentinel <br/>Univariate GMM per feature <br/>Directional SPIKE/DROP]:::tribunal
     end
 
-    HILBERT --> T1
+    PFS --> T1
     VEL_Z --> T4
 
     %% Veto & Decision Logic
-    VETO{fa:fa-hand-paper PORTERO VETO <br/> >20σ Deviation?}:::veto
+    VETO{fa:fa-hand-paper σ-Circuit Breaker <br/> >20σ Deviation?}:::veto
     CONSENSUS{fa:fa-calculator Consensus <br/> Σ w_i * s_i ≥ 0.5}
 
     T3 --> CONSENSUS
@@ -144,7 +160,7 @@ Ensemble of 100 trees that isolates anomalies through random partitioning. Robus
 
 ### Tier 3 — Physical Sentinel (Univariate Z-Score Auditor)
 
-Per‑feature univariate GMM scoring on the original physical families. Tracks directionality (SPIKE/DROP) for XAI attribution. A Portero veto mechanism forces CRITICAL severity on any window with a single‑feature deviation exceeding 20σ.
+Per‑feature univariate GMM scoring on the original physical families. Tracks directionality (SPIKE/DROP) for XAI attribution. A σ-Circuit Breaker (Portero veto) mechanism forces CRITICAL severity on any window with a single‑feature deviation exceeding 20σ.
 
 
 ### Tier 4 — Velocity Bypass Detector (Emergency Gate)
@@ -162,7 +178,7 @@ HiGI is evaluated on the [**CIC‑IDS2017**](https://www.unb.ca/cic/datasets/ids
 | Metric | Value | Notes |
 |---|---|---|
 | **Precision** | **1.000**  | 0 reportable incidents on 8 h of Monday benign traffic |
-| **Recall** | **0.875-1.000** | 7 of 8 observable attack classes detected; 1 ambiguous due to sensor data drop |
+| **Recall** | **0.875-1.000** | 7 of 8 attack campaigns detected (87.5%). The Thursday SQL Injection attack coincided with a sensor packet drop in the source PCAP, preventing feature aggregation — classified as a non-attributable miss after error analysis. |
 | **F1-Score** | **0.933 (conservative)**  | If the ambiguous case is counted as FN |
 | **False Positive Rate** | **0.000** at incident level | 266 sub‑threshold transients correctly suppressed |
 | **Detection Latency** | **≤ 1 min**  | Including slow‑rate attacks (Slowloris, Slowhttptest) |
@@ -200,6 +216,8 @@ HiGI has been validated against the **CIC-IDS2017 benchmark dataset** (Wednesday
 | DoS GoldenEye | 11:10 – 11:23 EDT | ✅ MATCH | 93.5% | `payload_continuity_ratio` ↑ 4,120σ · Keepalive Collapse |
 
 **Pre-Attack Reconnaissance Detected (Extra-GT):** HiGI flagged anomalous scanning activity at 09:26 EDT — **21 minutes before the first labeled attack** — mapping to MITRE ATT&CK T1046 (Network Service Discovery) and T1595.001 (Active Scanning). This phase is invisible to supervised models trained exclusively on attack labels.
+
+> **Note on σ-values:** Extreme deviations (>1,000σ) are expected in flood-based attacks after Yeo-Johnson transformation. Since the baseline distribution is tightly normalized, volumetric anomalies represent multi-standard-deviation departures from the learned manifold — not numerical artifacts or scaling errors.
 
 ### Summary Performance Metrics (Wednesday)
 
@@ -568,5 +586,5 @@ MIT License — see [`LICENSE`](./LICENSE) for full terms.
 
 ---
 
-*HiGI IDS — Created and Developed by Pablo Aguadero, 2026. Built with the assistance of free-tier AI tools (Gemini, Claude, Copilot) for architectural iteration, code review, and documentation drafting. All design decisions, physical models, and validation protocols are original work by the author.*
+*HiGI IDS — Created and Developed by Pablo Aguadero, 2026. Built with AI-assisted tooling (Gemini, Claude, GitHub Copilot) for architectural iteration, code review, and documentation drafting. All design decisions, physical models, and validation protocols are original work by the author.*  
 *Validated against CIC-IDS2017. Reference: Engelen, G., Rimmer, V., & Joosen, W. (2021). Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case Study. IEEE EuroS&PW. doi:10.1109/EuroSPW54576.2021.00015*
