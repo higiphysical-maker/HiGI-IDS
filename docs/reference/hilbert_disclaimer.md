@@ -51,7 +51,14 @@ The resulting space `ℝᵏ` has the property that:
 
     Now compute the squared Euclidean norm of $\mathbf{z}$:
 
-    $$\begin{aligned} \|\mathbf{z}\|_2^2 &= \mathbf{z}^\top \mathbf{z} \cr &= \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr)^\top \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr) \cr &= (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U} (\boldsymbol{\Lambda}^{-1/2})^\top \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) . \end{aligned}$$
+    $$\|\mathbf{z}\|_2^2 = \mathbf{z}^\top \mathbf{z}$$
+
+    $$\|\mathbf{z}\|_2^2 = \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr)^\top
+    \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr)$$
+
+    $$\|\mathbf{z}\|_2^2 = (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U}
+    (\boldsymbol{\Lambda}^{-1/2})^\top \boldsymbol{\Lambda}^{-1/2}
+    \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu})$$
 
     Since $\boldsymbol{\Lambda}$ is diagonal,
     $(\boldsymbol{\Lambda}^{-1/2})^\top = \boldsymbol{\Lambda}^{-1/2}$ and
