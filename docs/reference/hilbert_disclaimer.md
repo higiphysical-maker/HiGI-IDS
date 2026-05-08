@@ -33,7 +33,7 @@ The resulting space `ℝᵏ` has the property that:
     <summary><b>Click to expand the full derivation</b></summary>
 
     Let $\mathbf{x} \in \mathbb{R}^n$ be a feature vector with mean $\boldsymbol{\mu}$ and
-    covariance matrix $\boldsymbol{\Sigma}$. The Mahalanobis distance of a point
+    covariance matrix $\boldsymbol{\Sigma}$.  The Mahalanobis distance of a point
     $\mathbf{x}$ to the centre of the distribution is
 
     $$D_M(\mathbf{x}) = \sqrt{(\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})}\, .$$
@@ -45,52 +45,31 @@ The resulting space `ℝᵏ` has the property that:
 
     where $\mathbf{U}$ is the orthogonal matrix of eigenvectors
     ($\mathbf{U}^\top \mathbf{U} = \mathbf{I}$) and $\boldsymbol{\Lambda}$ is the
-    diagonal matrix of eigenvalues. The *whitening* transformation is defined as
+    diagonal matrix of eigenvalues.  The *whitening* transformation is defined as
 
     $$\mathbf{z} = \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}).$$
 
     Now compute the squared Euclidean norm of $\mathbf{z}$:
 
-    $$
-    \begin{aligned}
-    \|\mathbf{z}\|_2^2
-    &= \mathbf{z}^\top \mathbf{z} \\
-    &= \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr)^\top
-    \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr) \\
-    &= (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U}
-    (\boldsymbol{\Lambda}^{-1/2})^\top \boldsymbol{\Lambda}^{-1/2}
-    \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) .
-    \end{aligned}
-    $$
+    $$\begin{aligned} \|\mathbf{z}\|_2^2 &= \mathbf{z}^\top \mathbf{z} \\ &= \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr)^\top \bigl( \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) \bigr) \\ &= (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U} (\boldsymbol{\Lambda}^{-1/2})^\top \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) . \end{aligned}$$
 
     Since $\boldsymbol{\Lambda}$ is diagonal,
     $(\boldsymbol{\Lambda}^{-1/2})^\top = \boldsymbol{\Lambda}^{-1/2}$ and
     $\boldsymbol{\Lambda}^{-1/2}\boldsymbol{\Lambda}^{-1/2} = \boldsymbol{\Lambda}^{-1}$,
     so
 
-    $$
-    \|\mathbf{z}\|_2^2
-    = (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U} \boldsymbol{\Lambda}^{-1} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) .
-    $$
+    $$\|\mathbf{z}\|_2^2 = (\mathbf{x} - \boldsymbol{\mu})^\top \mathbf{U} \boldsymbol{\Lambda}^{-1} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}) .$$
 
     Using the matrix inverse identity
-    $\boldsymbol{\Sigma}^{-1} = (\mathbf{U} \boldsymbol{\Lambda} \mathbf{U}^\top)^{-1}
-    = \mathbf{U} \boldsymbol{\Lambda}^{-1} \mathbf{U}^\top$, we obtain
+    $\boldsymbol{\Sigma}^{-1} = (\mathbf{U} \boldsymbol{\Lambda} \mathbf{U}^\top)^{-1} = \mathbf{U} \boldsymbol{\Lambda}^{-1} \mathbf{U}^\top$, we obtain
 
-    $$
-    \|\mathbf{z}\|_2^2 = (\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu}) ,
-    $$
+    $$\|\mathbf{z}\|_2^2 = (\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu}) ,$$
 
     hence
 
-    $$
-    \boxed{\|\mathbf{z}\|_2 = \sqrt{(\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})} = D_M(\mathbf{x}) } .
-    $$
+    $$\boxed{\|\mathbf{z}\|_2 = \sqrt{(\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})} = D_M(\mathbf{x}) } .$$
 
-    In words: **after whitening the feature space, Euclidean distance is identical
-    to the Mahalanobis distance in the original space.** This is why HiGI’s
-    BallTree detector, which uses plain Euclidean distance, is actually measuring
-    statistically meaningful deviations from the baseline.
+    In words: **after whitening the feature space, Euclidean distance is identical to the Mahalanobis distance in the original space.**  This is why HiGI's BallTree detector, which uses plain Euclidean distance, is actually measuring statistically meaningful deviations from the baseline.
 
     </details>
 
