@@ -87,60 +87,61 @@ graph TD
     %% Ingestion Layer
     START((fa:fa-network-wired Ingestion)) --> PROC[processor_optime.py v2.3.0]
     PROC --> |Polars 1s Windows| FEAT[Physical Feature Extraction]
-    FEAT --> VEL_Z[Velocity Z-Score Calculation: <br/>vel_pps_z, vel_bytes_z, vel_syn_z]
+    FEAT --> VEL_Z["Velocity Z-Score Calculation:<br/>vel_pps_z, vel_bytes_z, vel_syn_z"]
 
-    subgraph Data_Conditioning [fa:fa-gears Data Conditioning]
+    subgraph Data_Conditioning ["fa:fa-gears Data Conditioning"]
         direction TB
-        YJ[Yeo-Johnson Power Transform <br/>Gaussianization & P99 Clipping]
-        BPCA[Blocked PCA by Physical Families <br/>Volume, Payload, Flags, Protocol, Conn]
-        PFS[fa:fa-vector-square Physics Feature Space (PFS) <br/>PCA Whitened · 17–25 dims <br/>Euclidean ≈ Mahalanobis distance]
+        YJ["Yeo-Johnson Power Transform<br/>Gaussianization & P99 Clipping"]
+        BPCA["Blocked PCA by Physical Families<br/>Volume, Payload, Flags, Protocol, Conn"]
+        PFS["fa:fa-vector-square Physics Feature Space (PFS)<br/>PCA Whitened · 17–25 dims<br/>Euclidean ≈ Mahalanobis distance"]
         
         YJ --> BPCA --> PFS
     end
 
     VEL_Z --> Data_Conditioning
 
-    subgraph Tribunal_of_Consensus [fa:fa-balance-scale Tribunal of Consensus]
+    subgraph Tribunal_of_Consensus ["fa:fa-balance-scale Tribunal of Consensus"]
         direction TB
-        T1[Tier 1: Geometric Gatekeeper <br/>BallTree k-NN Distances <br/>Norm. P99.9]:::tribunal
-        T4[Tier 4: Velocity Bypass <br/>Self-Normalizing Z-Scores <br/>Emergency Gate]:::tribunal
+        T1["Tier 1: Geometric Gatekeeper<br/>BallTree k-NN Distances<br/>Norm. P99.9"]:::tribunal
+        T4["Tier 4: Velocity Bypass<br/>Self-Normalizing Z-Scores<br/>Emergency Gate"]:::tribunal
         
-        T1 --> |Suspicious Mask| T2[Tier 2: Probabilistic Tribunal <br/>GMM Bayesian reg_covar=0.1 <br/>+ IForest Structural Isolation]:::tribunal
-        T2 --> T3[Tier 3: Physical Sentinel <br/>Univariate GMM per feature <br/>Directional SPIKE/DROP]:::tribunal
+        T1 --> |Suspicious Mask| T2["Tier 2: Probabilistic Tribunal<br/>GMM Bayesian reg_covar=0.1<br/>+ IForest Structural Isolation"]:::tribunal
+        T2 --> T3["Tier 3: Physical Sentinel<br/>Univariate GMM per feature<br/>Directional SPIKE/DROP"]:::tribunal
     end
 
     PFS --> T1
     VEL_Z --> T4
 
     %% Veto & Decision Logic
-    VETO{fa:fa-hand-paper σ-Circuit Breaker <br/> >20σ Deviation?}:::veto
-    CONSENSUS{fa:fa-calculator Consensus <br/> Σ w_i * s_i ≥ 0.5}
+    VETO{"fa:fa-hand-paper σ-Circuit Breaker<br/> >20σ Deviation?"}:::veto
+    CONSENSUS{"fa:fa-calculator Consensus<br/> Σ w_i * s_i ≥ 0.5"}
 
     T3 --> CONSENSUS
     FEAT --> VETO
     
     %% Tribunal Weighting
-    T1 -.-> |w=0.2125| CONSENSUS
-    T2 -.-> |w=0.6375| CONSENSUS
-    T4 -.-> |w=0.1500| CONSENSUS
+    T1 -.-> |"w=0.2125"| CONSENSUS
+    T2 -.-> |"w=0.6375"| CONSENSUS
+    T4 -.-> |"w=0.1500"| CONSENSUS
 
     %% Action & Forensics Layer
-    subgraph Action_Forensics [fa:fa-shield-halved Action & Forensics]
-        STAB[Temporal Stabilization <br/>Hysteresis FIX-3 & Persistence 3w]
-        FORENSIC[ForensicEngine <br/>Attribution & Culprit Mapping <br/>MITRE ATT&CK Mapping]:::action
-        REPORT[fa:fa-file-pdf PDF Report Generation <br/>SLA Dashboards]:::action
+    subgraph Action_Forensics ["fa:fa-shield-halved Action & Forensics"]
+        STAB["Temporal Stabilization<br/>Hysteresis FIX-3 & Persistence 3w"]
+        FORENSIC["ForensicEngine<br/>Attribution & Culprit Mapping<br/>MITRE ATT&CK Mapping"]:::action
+        REPORT["fa:fa-file-pdf PDF Report Generation<br/>SLA Dashboards"]:::action
     end
 
-    VETO --> |YES: CRITICAL BYPASS| STAB
-    CONSENSUS --> |is_anomaly=1| STAB
+    VETO --> |"YES: CRITICAL BYPASS"| STAB
+    CONSENSUS --> |"is_anomaly=1"| STAB
     T4 --> |Override| STAB
     
     STAB --> FORENSIC --> REPORT
 
     %% Class Assignment
     class START,PROC,FEAT,VEL_Z input;
-    class YJ,BPCA,HILBERT conditioning;
+    class YJ,BPCA,PFS conditioning;
     class STAB,FORENSIC,REPORT action;
+    
 ```
 HiGI's detection pipeline consists of four tiers, each addressing a distinct region of the anomaly space.
 

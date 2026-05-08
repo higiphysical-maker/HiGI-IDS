@@ -33,7 +33,7 @@ The resulting space `ℝᵏ` has the property that:
     <summary><b>Click to expand the full derivation</b></summary>
 
     Let $\mathbf{x} \in \mathbb{R}^n$ be a feature vector with mean $\boldsymbol{\mu}$ and
-    covariance matrix $\boldsymbol{\Sigma}$.  The Mahalanobis distance of a point
+    covariance matrix $\boldsymbol{\Sigma}$. The Mahalanobis distance of a point
     $\mathbf{x}$ to the centre of the distribution is
 
     $$D_M(\mathbf{x}) = \sqrt{(\mathbf{x} - \boldsymbol{\mu})^\top \boldsymbol{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})}\, .$$
@@ -45,7 +45,7 @@ The resulting space `ℝᵏ` has the property that:
 
     where $\mathbf{U}$ is the orthogonal matrix of eigenvectors
     ($\mathbf{U}^\top \mathbf{U} = \mathbf{I}$) and $\boldsymbol{\Lambda}$ is the
-    diagonal matrix of eigenvalues.  The *whitening* transformation is defined as
+    diagonal matrix of eigenvalues. The *whitening* transformation is defined as
 
     $$\mathbf{z} = \boldsymbol{\Lambda}^{-1/2} \mathbf{U}^\top (\mathbf{x} - \boldsymbol{\mu}).$$
 
@@ -88,7 +88,7 @@ The resulting space `ℝᵏ` has the property that:
     $$
 
     In words: **after whitening the feature space, Euclidean distance is identical
-    to the Mahalanobis distance in the original space.**  This is why HiGI’s
+    to the Mahalanobis distance in the original space.** This is why HiGI’s
     BallTree detector, which uses plain Euclidean distance, is actually measuring
     statistically meaningful deviations from the baseline.
 
